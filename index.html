@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mindori - Official Invoice</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        /* ==========================================
+           1. LOGIN SCREEN STYLES (Matched Logo Size)
+           ========================================== */
+        #login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #f1f5f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999;
+        }
+
+        .login-card {
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            width: 100%;
+            max-width: 380px;
+            box-sizing: border-box;
+            border-top: 8px solid #3D6D7C;
+            text-align: center;
+            font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+        }
+
+        .login-card img {
+            max-width: 160px;
+            margin-bottom: 25px;
+            height: auto;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .login-card h2 {
+            color: #3D6D7C;
+            margin: 0 0 24px 0;
+            font-size: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .login-field {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+
+        .login-field label {
+            display: block;
+            font-size: 11px;
+            font-weight: 800;
+            color: #1e293b;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .login-field input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+            outline: none;
+            color: #1e293b;
+        }
+
+        .login-field input:focus {
+            border-color: #3D6D7C;
+        }
+
+        .btn-submit-login {
+            width: 100%;
+            background: #3D6D7C;
+            color: white;
+            border: none;
+            padding: 14px;
+            font-size: 13px;
+            font-weight: 700;
+            border-radius: 4px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 10px;
+        }
+
+        #login-error-msg {
+            color: #ef4444;
+            font-size: 13px;
+            font-weight: 600;
+            margin-top: 15px;
+            display: none;
+        }
+
+        /* ==========================================
+           2. YOUR ORIGINAL INVOICE STYLES (Untouched)
+           ========================================== */
+        :root {
+            --primary: #3D6D7C;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --border: #cbd5e1;
+            --text-dark: #1e293b;
+            --text-muted: #64748b;
+        }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+            background-color: #f1f5f9;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 40px;
+            border-left: 10px solid var(--primary);
+            box-sizing: border-box;
+            min-height: 1050px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 20px;
+        }
+        .logo-container img { max-width: 160px; height: auto; }
+        .header-right h1 { margin: 0; color: var(--primary); font-size: 26px; text-transform: uppercase; }
+        .invoice-number-text { color: var(--accent); font-size: 16px; font-weight: 700; }
+
+        .details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 30px;
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 4px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 800;
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 4px;
+        }
+
+        .detail-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .detail-label {
+            color: var(--text-muted);
+            min-width: 95px;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .detail-row input {
+            flex: 1;
+            border: none;
+            border-bottom: 1px solid var(--border);
+            background: transparent;
+            padding: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-dark);
+            outline: none;
+            transition: border-color 0.2s ease;
+        }
+
+        .detail-row input:focus { border-bottom: 1px solid var(--accent); }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }
+        thead th {
+            text-align: left;
+            padding: 12px;
+            background: var(--primary);
+            color: white;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        tbody tr { border-bottom: 1px solid #f1f5f9; }
+        td { padding: 10px 12px; vertical-align: top; }
+
+        .desc-col-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .item-number {
+            font-weight: 800;
+            color: var(--text-muted);
+            font-size: 13px;
+            padding-top: 5px;
+            min-width: 20px;
+        }
+
+        .desc-input {
+            width: 100%;
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-dark);
+            padding: 5px 0;
+            margin: 0;
+            outline: none;
+            resize: none;
+            overflow: hidden;
+            font-family: inherit;
+            line-height: 1.4;
+            display: block;
+        }
+
+        .box-input { border: 1px solid var(--border); border-radius: 4px; padding: 5px 8px; background: white; display: flex; align-items: center; }
+        .box-input input { border: none; width: 100%; text-align: right; font-size: 13px; outline: none; }
+        .qty-input { width: 50px; text-align: center !important; }
+
+        .summary-wrapper { display: flex; justify-content: flex-end; margin-top: 30px; }
+        .totals-box { width: 320px; }
+        .totals-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
+        .grand-total { border-top: 2px solid var(--primary); margin-top: 10px; padding-top: 15px; color: var(--primary); font-weight: 800; font-size: 22px; }
+
+        .footer { margin-top: 50px; text-align: center; }
+        .thank-you-banner {
+            background: var(--primary);
+            color: white;
+            padding: 12px;
+            font-weight: 700;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+        }
+        .contact-info { font-size: 14px; color: var(--text-muted); line-height: 1.8; }
+
+        .interactive-link { color: var(--accent); font-weight: 700; text-decoration: underline; display: inline-block; transition: all 0.2s ease; }
+        .interactive-link:hover { color: var(--accent-hover); transform: translateY(-1px); }
+
+        .review-link { display: inline-block; margin-top: 10px; color: var(--accent); font-weight: 700; text-decoration: none; font-size: 14px; transition: all 0.2s ease; }
+        .review-link span.text-to-underline { text-decoration: underline; }
+        .review-link:hover { color: var(--accent-hover); transform: translateY(-1px); }
+
+        .btn-add { background: var(--accent); color: white; border: none; padding: 10px 18px; border-radius: 4px; cursor: pointer; font-weight: 700; margin-top: 15px; font-size: 12px; }
+        .btn-dl-wrap { text-align: center; margin: 40px 0; }
+        .btn-dl { background: var(--primary); color: white; padding: 16px 45px; border-radius: 50px; border: none; font-weight: 800; cursor: pointer; font-size: 16px; transition: 0.3s; }
+        .btn-dl:hover { opacity: 0.9; }
+        .delete-btn { color: #ef4444; cursor: pointer; font-weight: bold; font-size: 18px; line-height: 1; padding-top: 3px; }
+
+        .show-on-print { display: none; }
+        .pdf-mode .hide-on-print { display: none !important; }
+        .pdf-mode .show-on-print { display: inline-block !important; font-size: 14px; color: var(--text-dark); font-weight: 600; }
+        .pdf-mode .container { box-shadow: none !important; width: 100% !important; padding: 30px !important; }
+        .pdf-mode .logo-container img { max-width: 160px !important; height: auto !important; }
+        .pdf-mode td { padding: 12px !important; vertical-align: top; }
+        .hide-discount { display: none !important; }
+
+        .pdf-mode .desc-input {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow: visible;
+            height: auto !important;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ==========================================
+     3. LOGIN OVERLAY BLOCK (Uniform Unified Logo Size)
+     ========================================== -->
+<div id="login-overlay">
+    <div class="login-card">
+        <img src="https://lh3.googleusercontent.com/d/1eRWJA0tIx8HCmvVhfF1UlnV3J4EpGYQt" alt="Mindori Logo">
+        <h2>Portal Verification</h2>
+        <div class="login-field">
+            <label>Username</label>
+            <input type="text" id="auth-user" placeholder="Enter team username">
+        </div>
+        <div class="login-field">
+            <label>Password</label>
+            <input type="password" id="auth-pass" placeholder="Enter password" onkeydown="if(event.key === 'Enter') submitTeamLogin()">
+        </div>
+        <button class="btn-submit-login" onclick="submitTeamLogin()">Login</button>
+        <div id="login-error-msg">Access Denied: Invalid Credentials</div>
+    </div>
+</div>
+
+
+<!-- ==========================================
+     4. YOUR ORIGINAL INVOICE BODY (Untouched)
+     ========================================== -->
+<div class="container" id="capture-area">
+    <div class="header">
+        <div class="logo-container">
+            <img id="logoImg" src="https://lh3.googleusercontent.com/d/1eRWJA0tIx8HCmvVhfF1UlnV3J4EpGYQt" alt="Mindori Logo" crossOrigin="anonymous">
+        </div>
+        <div class="header-right">
+            <h1>Bill of Supply</h1>
+            <div class="invoice-number-text" id="displayInvoiceNum">MIN-0000001</div>
+        </div>
+    </div>
+
+    <div class="details-grid">
+        <div class="input-group">
+            <label>Bill To</label>
+            <div class="detail-row">
+                <span class="detail-label">Name:</span>
+                <input type="text" id="custName" class="hide-on-print" placeholder="Customer Name">
+                <span id="printCustName" class="show-on-print"></span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Phone:</span>
+                <input type="text" id="custPhone" class="hide-on-print" placeholder="+91 00000 00000">
+                <span id="printCustPhone" class="show-on-print"></span>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>Invoice Details</label>
+            <div class="detail-row">
+                <span class="detail-label">Date:</span>
+                <input type="date" id="invoiceDate" class="hide-on-print">
+                <span id="printDate" class="show-on-print"></span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Instagram ID:</span>
+                <input type="text" id="custInsta" class="hide-on-print" placeholder="@username">
+                <span id="printCustInsta" class="show-on-print"></span>
+            </div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th width="45%">Item Description</th>
+                <th width="15%">Price</th>
+                <th width="10%">Qty</th>
+                <th width="15%">Discount %</th>
+                <th width="15%" style="text-align: right;">Total</th>
+            </tr>
+        </thead>
+        <tbody id="invoiceBody"></tbody>
+    </table>
+
+    <button class="btn-add hide-on-print" onclick="addNewRow()">+ Add New Item</button>
+
+    <div class="summary-wrapper">
+        <div class="totals-box">
+            <div class="totals-row"><span>Subtotal</span><span id="subtotal">₹0.00</span></div>
+            <div class="totals-row" id="discountSummaryRow"><span>Total Discount</span><span id="totalDiscount" style="color: #ef4444;">-₹0.00</span></div>
+            <div class="totals-row grand-total"><span>Grand Total</span><span id="grandTotal">₹0.00</span></div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <div class="thank-you-banner">THANK YOU FOR CHOOSING MINDORI 🌸</div>
+        <div class="contact-info">
+            Classic Complex, 420-421, Ghod Dod Rd, Shringar Society, Athwa, Surat, Gujarat 395007<br>
+            <span>🌐</span> <a href="https://www.mindori.in" target="_blank" class="interactive-link">www.mindori.in</a> |
+            <span>📍</span> <a href="https://www.google.com/maps/dir//Mindori+Bagh,+Classic+Complex,+420-421,+Ghod+Dod+Rd,+Shringar+Society,+Athwa,+Surat,+Gujarat+395007/@21.1874747,72.8137728,15z/data=!4m8!4m7!1m0!1m5!1m1!1s0x3be04d0014b219ad:0xf141a6f2c5944279!2m2!1d72.7952237!2d21.1738258" target="_blank" class="interactive-link">Visit Our Store</a> |
+            <span>📞</span> <a href="tel:9601329228" style="color: var(--text-muted); text-decoration: none;">9601329228</a><br>
+            <a href="https://www.google.com/search?q=Mindori+Bagh+Reviews" target="_blank" class="review-link">
+                🌻 <span class="text-to-underline">Review Us On Google</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="btn-dl-wrap hide-on-print">
+    <button id="dl-button" class="btn-dl" onclick="generatePDF()">DOWNLOAD INVOICE (PDF)</button>
+</div>
+
+
+<!-- ==========================================
+     5. SCRIPTS CONTROLLER
+     ========================================== -->
+<script>
+    // --- YOUR ORIGINAL INVOICE JAVASCRIPT (100% Untouched) ---
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzxTiWuar4DNWfHVetsWDE1vjYM95_mwZNrpOsUY8qUL83ZJbpDST6Wxw3AlfzdCNCc/exec';
+
+    document.getElementById('invoiceDate').valueAsDate = new Date();
+    let invoiceItems = [];
+    let currentGrandTotal = 0;
+
+    function formatCurrency(num) {
+        return num.toLocaleString('en-IN', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    function getNextInvoiceNumber() {
+        let lastNum = parseInt(localStorage.getItem('mindori_v6_final'), 10);
+        if (isNaN(lastNum) || lastNum < 0) lastNum = 0;
+        return lastNum + 1;
+    }
+
+    const currentInvoiceNum = getNextInvoiceNumber();
+    const formattedInvoiceID = "MIN-" + currentInvoiceNum.toString().padStart(7, '0');
+    document.getElementById('displayInvoiceNum').innerText = formattedInvoiceID;
+
+    window.onload = () => { addNewRow(); };
+
+    function addNewRow() {
+        invoiceItems.push({ name: "", price: 0, qty: 1, discount: 0 });
+        render();
+    }
+
+    function autoExpand(el) {
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+    }
+
+    function updateData(index, field, val) {
+        if (field === 'name') {
+            invoiceItems[index].name = val;
+        } else {
+            invoiceItems[index][field] = parseFloat(val) || 0;
+        }
+        calculate();
+    }
+
+    function calculate() {
+        let subtotal = 0, totalDisc = 0;
+        let anyDiscountApplied = false;
+
+        document.getElementById('printCustName').innerText = document.getElementById('custName').value;
+        document.getElementById('printCustPhone').innerText = document.getElementById('custPhone').value;
+        document.getElementById('printCustInsta').innerText = document.getElementById('custInsta').value;
+
+        const dateVal = document.getElementById('invoiceDate').value;
+        if(dateVal) {
+            const [y, m, d] = dateVal.split('-');
+            document.getElementById('printDate').innerText = `${d}/${m}/${y}`;
+        }
+
+        invoiceItems.forEach((item, i) => {
+            const rowTotalRaw = item.price * item.qty;
+            const rowDisc = rowTotalRaw * (item.discount / 100);
+            const rowFinal = rowTotalRaw - rowDisc;
+
+            subtotal += rowTotalRaw;
+            totalDisc += rowDisc;
+            if (item.discount > 0) anyDiscountApplied = true;
+
+            const display = document.getElementById(`row-total-${i}`);
+            if(display) display.innerText = `₹${formatCurrency(rowFinal)}`;
+
+            const pPrice = document.getElementById(`print-price-${i}`);
+            const pQty = document.getElementById(`print-qty-${i}`);
+            const pDisc = document.getElementById(`print-disc-${i}`);
+
+            if(pPrice) pPrice.innerText = `₹${formatCurrency(item.price)}`;
+            if(pQty) pQty.innerText = item.qty;
+            if(pDisc) pDisc.innerText = `${item.discount}%`;
+        });
+
+        currentGrandTotal = subtotal - totalDisc;
+        document.getElementById('subtotal').innerText = `₹${formatCurrency(subtotal)}`;
+        document.getElementById('totalDiscount').innerText = `-₹${formatCurrency(totalDisc)}`;
+        document.getElementById('grandTotal').innerText = `₹${formatCurrency(currentGrandTotal)}`;
+
+        const discRow = document.getElementById('discountSummaryRow');
+        if (!anyDiscountApplied) {
+            discRow.classList.add('hide-discount');
+        } else {
+            discRow.classList.remove('hide-discount');
+        }
+    }
+
+    async function saveToSheet() {
+        if (!SCRIPT_URL || SCRIPT_URL.includes('edit')) return;
+
+        // Filter out rows where the description is empty
+        const validItems = invoiceItems.filter(item => item.name.trim() !== "");
+
+        if (validItems.length === 0) return;
+
+        const payload = {
+            invoiceID: document.getElementById('displayInvoiceNum').innerText,
+            date: document.getElementById('printDate').innerText,
+            customerName: document.getElementById('custName').value,
+            phone: document.getElementById('custPhone').value,
+            instagramID: document.getElementById('custInsta').value,
+            grandTotal: currentGrandTotal,
+            items: validItems.map(item => ({
+                name: item.name,
+                price: item.price,
+                qty: item.qty,
+                discount: item.discount
+            }))
+        };
+
+        try {
+            await fetch(SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                cache: 'no-cache',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(payload)
+            });
+            console.log("Data successfully logged to Sheet.");
+        } catch (e) {
+            console.error("Save Error:", e);
+        }
+    }
+
+    function removeRow(index) {
+        if (invoiceItems.length > 1) invoiceItems.splice(index, 1);
+        else invoiceItems = [{ name: "", price: 0, qty: 1, discount: 0 }];
+        render();
+    }
+
+    function render() {
+        const body = document.getElementById('invoiceBody');
+        body.innerHTML = '';
+        invoiceItems.forEach((item, i) => {
+            const rowTotal = (item.price * item.qty) * (1 - (item.discount / 100));
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>
+                    <div class="desc-col-container">
+                        <span class="delete-btn hide-on-print" onclick="removeRow(${i})">×</span>
+                        <span class="item-number">${i + 1}.</span>
+                        <textarea class="desc-input" rows="1" placeholder="Enter item description..." oninput="updateData(${i}, 'name', this.value); autoExpand(this)">${item.name}</textarea>
+                    </div>
+                </td>
+                <td>
+                    <div class="box-input hide-on-print">
+                        <span style="font-size:10px; color:var(--text-muted)">₹</span>
+                        <input type="number" value="${item.price}" oninput="updateData(${i}, 'price', this.value)">
+                    </div>
+                    <span class="show-on-print" id="print-price-${i}">₹${formatCurrency(item.price)}</span>
+                </td>
+                <td>
+                    <div class="box-input hide-on-print" style="padding: 5px 2px;">
+                        <input type="number" class="qty-input" value="${item.qty}" oninput="updateData(${i}, 'qty', this.value)">
+                    </div>
+                    <span class="show-on-print" id="print-qty-${i}">${item.qty}</span>
+                </td>
+                <td>
+                    <div class="box-input hide-on-print">
+                        <input type="number" value="${item.discount}" oninput="updateData(${i}, 'discount', this.value)">
+                        <span style="font-size:10px; color:var(--text-muted)">%</span>
+                    </div>
+                    <span class="show-on-print" id="print-disc-${i}">${item.discount}%</span>
+                </td>
+                <td style="text-align: right; font-weight: 700; padding-top: 15px;" id="row-total-${i}">₹${formatCurrency(rowTotal)}</td>
+            `;
+            body.appendChild(tr);
+            const ta = tr.querySelector('textarea');
+            autoExpand(ta);
+        });
+        calculate();
+    }
+
+    async function generatePDF() {
+        const btn = document.getElementById('dl-button');
+        const element = document.getElementById('capture-area');
+
+        const custNameInput = document.getElementById('custName').value.trim();
+        const safeCustName = custNameInput.replace(/[^a-z0-9]/gi, '_') || "Customer";
+        const fileName = `${formattedInvoiceID}_${safeCustName}.pdf`;
+
+        calculate();
+
+        btn.innerText = "SAVING & PREPARING PDF...";
+        btn.disabled = true;
+        element.classList.add('pdf-mode');
+
+        await saveToSheet();
+
+        const opt = {
+            margin: [0, 0, 0, 0],
+            filename: fileName,
+            image: { type: 'jpeg', quality: 1.0 },
+            html2canvas: { scale: 3, useCORS: true, letterRendering: true, scrollY: 0 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        try {
+            await html2pdf().set(opt).from(element).save();
+            // Increment only if success:
+            localStorage.setItem('mindori_v6_final', currentInvoiceNum);
+            setTimeout(() => {
+                element.classList.remove('pdf-mode');
+                btn.innerText = "DOWNLOAD INVOICE (PDF)";
+                btn.disabled = false;
+                location.reload();
+            }, 1500);
+        } catch (e) {
+            element.classList.remove('pdf-mode');
+            btn.disabled = false;
+            btn.innerText = "DOWNLOAD INVOICE (PDF)";
+            alert("Error generating PDF. Please try again.");
+        }
+    }
+</script>
+
+<script type="module">
+  // Import Firebase Core and Analytics
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js";
+  
+  // Import Firebase Authentication
+  import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBkTazE-MvTXkMh79lwLiOaW2NeY8MpxyA",
+    authDomain: "mindori-invoices.firebaseapp.com",
+    projectId: "mindori-invoices",
+    storageBucket: "mindori-invoices.firebasestorage.app",
+    messagingSenderId: "732407548525",
+    appId: "1:732407548525:web:0d48a8f781cb8ee0f04d64",
+    measurementId: "G-KJCH8CLBQN"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+  const auth = getAuth(app);
+
+  // 1. Listen for Authentication State Changes (Persists login on refresh)
+  onAuthStateChanged(auth, (user) => {
+    const overlay = document.getElementById('login-overlay');
+    if (user) {
+      // User is logged in securely
+      overlay.style.display = 'none';
+    } else {
+      // User is not logged in, show the overlay
+      overlay.style.display = 'flex';
+    }
+  });
+
+  // 2. Attach login function to the global window object so your HTML button can trigger it
+  window.submitTeamLogin = () => {
+    const u = document.getElementById('auth-user').value;
+    const p = document.getElementById('auth-pass').value;
+    const err = document.getElementById('login-error-msg');
+
+    // Format username to email if it isn't one already (e.g., mindoriteam -> mindoriteam@mindori.in)
+    const email = u.includes('@') ? u : `${u}@mindori.in`;
+
+    // Authenticate with Firebase securely
+    signInWithEmailAndPassword(auth, email, p)
+      .then((userCredential) => {
+        // Success! The onAuthStateChanged listener above will automatically hide the overlay.
+        err.style.display = 'none';
+      })
+      .catch((error) => {
+        // Access Denied
+        err.style.display = 'block';
+        err.innerText = "Access Denied: Invalid Credentials";
+        console.error("Login Error:", error.message);
+      });
+  };
+</script>
+</body>
+</html>
