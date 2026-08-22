@@ -411,6 +411,7 @@
     document.getElementById('invoiceDate').valueAsDate = new Date();
     let invoiceItems = [];
     let currentGrandTotal = 0;
+    let savedToSheet = false; // Guard: the sheet entry must be created only ONCE per invoice
 
     function formatCurrency(num) {
         return num.toLocaleString('en-IN', {
@@ -499,12 +500,19 @@
     }
 
     async function saveToSheet() {
+        // Never write the same invoice to the sheet more than once.
+        // (Re-clicking Download after a PDF error must NOT create a duplicate row.)
+        if (savedToSheet) return;
+
         if (!SCRIPT_URL || SCRIPT_URL.includes('edit')) return;
 
         // Filter out rows where the description is empty
         const validItems = invoiceItems.filter(item => item.name.trim() !== "");
 
         if (validItems.length === 0) return;
+
+        // Lock immediately (before the await) so a rapid double-click can't fire two requests.
+        savedToSheet = true;
 
         const payload = {
             invoiceID: document.getElementById('displayInvoiceNum').innerText,
@@ -532,6 +540,8 @@
             console.log("Data successfully logged to Sheet.");
         } catch (e) {
             console.error("Save Error:", e);
+            // The request never left the browser (e.g. offline) — release the lock so a real retry can save.
+            savedToSheet = false;
         }
     }
 
