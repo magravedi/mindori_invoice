@@ -479,15 +479,29 @@
         });
     }
 
-    function getNextInvoiceNumber() {
-        let lastNum = parseInt(localStorage.getItem('mindori_v6_final'), 10);
-        if (isNaN(lastNum) || lastNum < 0) lastNum = 0;
-        return lastNum + 1;
+    // Invoice numbers come from a SHARED Firestore counter (see the module script below) so
+    // they never collide across devices or tabs. The header shows a live "next" preview; the
+    // real number is claimed atomically at download time, so two people saving at the same
+    // moment can never end up with the same number.
+    function formatInvoiceID(n) {
+        return "MIN-" + String(n).padStart(7, '0');
     }
+    let currentInvoiceNum = null;   // the number claimed for THIS invoice (set at download)
+    let formattedInvoiceID = "";    // e.g. "MIN-0000042" (used for the PDF filename)
+    document.getElementById('displayInvoiceNum').innerText = "MIN-…";
 
-    const currentInvoiceNum = getNextInvoiceNumber();
-    const formattedInvoiceID = "MIN-" + currentInvoiceNum.toString().padStart(7, '0');
-    document.getElementById('displayInvoiceNum').innerText = formattedInvoiceID;
+    // The module calls this once the user is authenticated: show the next number as a preview.
+    window.__mindoriShowInvoicePreview = async () => {
+        try {
+            if (typeof window.__mindoriPeekInvoiceNumber !== 'function') return;
+            const next = await window.__mindoriPeekInvoiceNumber();
+            if (currentInvoiceNum === null) {  // don't overwrite an already-claimed number
+                document.getElementById('displayInvoiceNum').innerText = formatInvoiceID(next);
+            }
+        } catch (e) {
+            console.error("Invoice preview error:", e);
+        }
+    };
 
     window.onload = () => { addNewRow(); };
 
@@ -657,14 +671,36 @@
         const btn = document.getElementById('dl-button');
         const element = document.getElementById('capture-area');
 
-        const custNameInput = document.getElementById('custName').value.trim();
-        const safeCustName = custNameInput.replace(/[^a-z0-9]/gi, '_') || "Customer";
-        const fileName = `${formattedInvoiceID}_${safeCustName}.pdf`;
-
         calculate();
 
         btn.innerText = "SAVING & PREPARING PDF...";
         btn.disabled = true;
+
+        // Claim a unique invoice number from the shared Firestore counter BEFORE building the
+        // PDF, so the number on the PDF and in the sheet is race-safe across devices. Claim
+        // only ONCE per invoice: if a previous attempt already claimed one (e.g. a PDF error
+        // and a retry), reuse it so the PDF and the sheet row never disagree.
+        if (currentInvoiceNum === null) {
+            try {
+                if (typeof window.__mindoriAssignInvoiceNumber !== 'function') {
+                    throw new Error('Invoice numbering service not ready');
+                }
+                currentInvoiceNum = await window.__mindoriAssignInvoiceNumber();
+                formattedInvoiceID = formatInvoiceID(currentInvoiceNum);
+            } catch (e) {
+                console.error("Invoice number assignment failed:", e);
+                btn.disabled = false;
+                btn.innerText = "DOWNLOAD INVOICE (PDF)";
+                alert("Couldn't get an invoice number. Please check your connection (and that you're still logged in), then try again.");
+                return;
+            }
+        }
+        document.getElementById('displayInvoiceNum').innerText = formattedInvoiceID;
+
+        const custNameInput = document.getElementById('custName').value.trim();
+        const safeCustName = custNameInput.replace(/[^a-z0-9]/gi, '_') || "Customer";
+        const fileName = `${formattedInvoiceID}_${safeCustName}.pdf`;
+
         element.classList.add('pdf-mode');
 
         await saveToSheet();
@@ -683,8 +719,8 @@
 
         try {
             await html2pdf().set(opt).from(element).save();
-            // Increment only if success:
-            localStorage.setItem('mindori_v6_final', currentInvoiceNum);
+            // The number was already claimed atomically from Firestore before saving,
+            // so there is nothing to persist locally here.
             setTimeout(() => {
                 element.classList.remove('pdf-mode');
                 btn.innerText = "DOWNLOAD INVOICE (PDF)";
@@ -708,6 +744,9 @@
   // Import Firebase Authentication
   import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
+  // Import Cloud Firestore — holds the shared invoice-number counter (race-safe across devices)
+  import { getFirestore, doc, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+
   const firebaseConfig = {
     apiKey: "AIzaSyBkTazE-MvTXkMh79lwLiOaW2NeY8MpxyA",
     authDomain: "mindori-invoices.firebaseapp.com",
@@ -722,6 +761,31 @@
   const app = initializeApp(firebaseConfig);
   const analytics = getAnalytics(app);
   const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // Shared invoice-number counter: one document holds the last number issued; every device
+  // reads and increments it, so numbers never collide across devices or tabs. Access is
+  // guarded by Firestore security rules — any signed-in team member may read/increment it.
+  const counterRef = doc(db, 'meta', 'invoiceCounter');
+
+  // Peek the next number WITHOUT consuming it (used for the header preview).
+  window.__mindoriPeekInvoiceNumber = async () => {
+    const snap = await getDoc(counterRef);
+    const last = (snap.exists() && typeof snap.data().lastNumber === 'number') ? snap.data().lastNumber : 0;
+    return last + 1;
+  };
+
+  // Atomically claim the next number (consumes it). runTransaction retries on contention, so
+  // two people clicking Download at the same instant always get different numbers.
+  window.__mindoriAssignInvoiceNumber = async () => {
+    return await runTransaction(db, async (tx) => {
+      const snap = await tx.get(counterRef);
+      const last = (snap.exists() && typeof snap.data().lastNumber === 'number') ? snap.data().lastNumber : 0;
+      const next = last + 1;
+      tx.set(counterRef, { lastNumber: next }, { merge: true });
+      return next;
+    });
+  };
 
   // 1. Listen for Authentication State Changes (Persists login on refresh)
   onAuthStateChanged(auth, (user) => {
@@ -729,6 +793,8 @@
     if (user) {
       // User is logged in securely
       overlay.style.display = 'none';
+      // Now that we're authenticated (Firestore rules require it), show the next-number preview.
+      if (typeof window.__mindoriShowInvoicePreview === 'function') window.__mindoriShowInvoicePreview();
     } else {
       // User is not logged in, show the overlay
       overlay.style.display = 'flex';
