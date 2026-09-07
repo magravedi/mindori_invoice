@@ -105,6 +105,26 @@
             display: none;
         }
 
+        /* "Show password" toggle row on the login card */
+        .login-field label.show-pass-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 12px 0 0 0;
+            font-size: 12px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: none;
+            letter-spacing: normal;
+            cursor: pointer;
+        }
+        .login-field label.show-pass-row input {
+            width: auto;
+            padding: 0;
+            margin: 0;
+            cursor: pointer;
+        }
+
         /* ==========================================
            2. YOUR ORIGINAL INVOICE STYLES (Untouched)
            ========================================== */
@@ -280,6 +300,9 @@
         .pdf-mode .hide-on-print { display: none !important; }
         .pdf-mode .show-on-print { display: inline-block !important; font-size: 14px; color: var(--text-dark); font-weight: 600; }
         .pdf-mode .container { box-shadow: none !important; width: 100% !important; padding: 30px !important; }
+        /* pdf-mode is applied to the container element itself, so target it directly.
+           Drop the forced full-page height so a short invoice stays on ONE page. */
+        .container.pdf-mode { min-height: 0 !important; }
         .pdf-mode .logo-container img { max-width: 160px !important; height: auto !important; }
         .pdf-mode td { padding: 12px !important; vertical-align: top; }
         .hide-discount { display: none !important; }
@@ -290,6 +313,13 @@
             overflow: visible;
             height: auto !important;
         }
+
+        /* Never slice a row or a key block across PDF pages — only overflow to a second
+           page when the items genuinely don't fit, and always break between whole rows */
+        .pdf-mode thead,
+        .pdf-mode tr,
+        .pdf-mode .summary-wrapper,
+        .pdf-mode .footer { page-break-inside: avoid; }
     </style>
 </head>
 <body>
@@ -308,8 +338,9 @@
         <div class="login-field">
             <label>Password</label>
             <input type="password" id="auth-pass" placeholder="Enter password" onkeydown="if(event.key === 'Enter') submitTeamLogin()">
+            <label class="show-pass-row"><input type="checkbox" id="show-pass-check"> Show password</label>
         </div>
-        <button class="btn-submit-login" onclick="submitTeamLogin()">Login</button>
+        <button class="btn-submit-login" id="login-btn" onclick="submitTeamLogin()">Login</button>
         <div id="login-error-msg">Access Denied: Invalid Credentials</div>
     </div>
 </div>
@@ -407,6 +438,34 @@
 <script>
     // --- YOUR ORIGINAL INVOICE JAVASCRIPT (100% Untouched) ---
     const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzxTiWuar4DNWfHVetsWDE1vjYM95_mwZNrpOsUY8qUL83ZJbpDST6Wxw3AlfzdCNCc/exec';
+
+    // --- Login dispatcher: fixes the "have to click Login twice" bug ---
+    // The real Firebase sign-in (window.__mindoriDoLogin) lives in the module below, which
+    // loads asynchronously over the network. This dispatcher is defined immediately, so the
+    // first click is never lost to a not-yet-loaded handler: if Firebase isn't ready yet we
+    // remember the intent and run it the instant it loads — one click always logs in.
+    window.__mindoriAuthReady = false;
+    window.__mindoriPendingLogin = false;
+    window.submitTeamLogin = function () {
+        const btn = document.getElementById('login-btn');
+        if (!window.__mindoriAuthReady) {
+            window.__mindoriPendingLogin = true;
+            if (btn) { btn.disabled = true; btn.innerText = 'Connecting...'; }
+            return;
+        }
+        window.__mindoriDoLogin();
+    };
+
+    // "Show password" toggle on the login screen
+    (function () {
+        const chk = document.getElementById('show-pass-check');
+        const pass = document.getElementById('auth-pass');
+        if (chk && pass) {
+            chk.addEventListener('change', function () {
+                pass.type = chk.checked ? 'text' : 'password';
+            });
+        }
+    })();
 
     document.getElementById('invoiceDate').valueAsDate = new Date();
     let invoiceItems = [];
@@ -611,11 +670,15 @@
         await saveToSheet();
 
         const opt = {
-            margin: [0, 0, 0, 0],
+            // top, left, bottom, right (mm) — keeps content off the page edges so nothing gets cut
+            margin: [10, 10, 12, 10],
             filename: fileName,
             image: { type: 'jpeg', quality: 1.0 },
             html2canvas: { scale: 3, useCORS: true, letterRendering: true, scrollY: 0 },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            // Only spill onto a second page when items genuinely overflow, and break
+            // between whole rows/blocks (see .pdf-mode page-break-inside rules) — never mid-row
+            pagebreak: { mode: ['css', 'legacy'] }
         };
 
         try {
@@ -672,28 +735,49 @@
     }
   });
 
-  // 2. Attach login function to the global window object so your HTML button can trigger it
-  window.submitTeamLogin = () => {
+  // 2. The real sign-in. The public window.submitTeamLogin dispatcher (defined earlier,
+  //    before this module loads) calls this once Firebase is ready — so the very first
+  //    click always authenticates instead of being lost to a not-yet-loaded handler.
+  window.__mindoriDoLogin = () => {
     const u = document.getElementById('auth-user').value;
     const p = document.getElementById('auth-pass').value;
     const err = document.getElementById('login-error-msg');
+    const btn = document.getElementById('login-btn');
+
+    err.style.display = 'none';
+    if (btn) { btn.disabled = true; btn.innerText = 'Verifying...'; }
 
     // Format username to email if it isn't one already (e.g., mindoriteam -> mindoriteam@mindori.in)
     const email = u.includes('@') ? u : `${u}@mindori.in`;
 
     // Authenticate with Firebase securely
     signInWithEmailAndPassword(auth, email, p)
-      .then((userCredential) => {
-        // Success! The onAuthStateChanged listener above will automatically hide the overlay.
+      .then(() => {
+        // Success — hide the overlay immediately (onAuthStateChanged also fires as a backup)
         err.style.display = 'none';
+        document.getElementById('login-overlay').style.display = 'none';
       })
       .catch((error) => {
-        // Access Denied
+        // Access Denied — re-enable the button so they can retry
         err.style.display = 'block';
         err.innerText = "Access Denied: Invalid Credentials";
+        if (btn) { btn.disabled = false; btn.innerText = 'Login'; }
         console.error("Login Error:", error.message);
       });
   };
+
+  // 3. Firebase is ready: enable the Login button and flush any click that was queued
+  //    while the SDK was still loading, so the user only ever has to click once.
+  window.__mindoriAuthReady = true;
+  const __loginBtn = document.getElementById('login-btn');
+  if (__loginBtn) {
+    __loginBtn.disabled = false;
+    if (__loginBtn.innerText === 'Connecting...') __loginBtn.innerText = 'Login';
+  }
+  if (window.__mindoriPendingLogin) {
+    window.__mindoriPendingLogin = false;
+    window.__mindoriDoLogin();
+  }
 </script>
 </body>
 </html>
