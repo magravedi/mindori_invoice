@@ -170,6 +170,14 @@
             margin-top: 15px;
             display: none;
         }
+        .show-pass-row {
+            display: flex; align-items: center; gap: 8px;
+            margin-top: 10px; font-size: 13px; font-weight: 600; color: #64748b;
+            cursor: pointer; text-align: left; text-transform: none; letter-spacing: normal;
+        }
+        #login-overlay .show-pass-row input {
+            width: auto; margin: 0; padding: 0; min-height: 0; cursor: pointer;
+        }
         .user-bar {
             display: flex;
             align-items: center;
@@ -882,6 +890,7 @@
         <div class="login-field">
             <label>Password</label>
             <input type="password" id="auth-pass" placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key === 'Enter') submitTeamLogin()">
+            <label class="show-pass-row"><input type="checkbox" id="show-pass-check" onchange="document.getElementById('auth-pass').type = this.checked ? 'text' : 'password'"> Show password</label>
         </div>
         <button class="btn-submit-login" onclick="submitTeamLogin()">Login</button>
         <div id="login-error-msg">Access Denied: Invalid Credentials</div>
@@ -1110,6 +1119,23 @@
      ========================================== -->
 <script>
     const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzh-MfzDY9uiEaixCQ36yWYzTh0lvUk3GltFDkQ9Vw9VINy1pOUta9Nh3HibFNXPn_S/exec';
+
+    // --- Login dispatcher: fixes the "tap Login twice" issue ---
+    // The real sign-in (window.__doTeamLogin) lives in the Firebase module below,
+    // which loads asynchronously. Define this dispatcher up front so the very first
+    // tap is never lost: if Firebase isn't ready yet, remember the tap and run it the
+    // instant it loads. One tap always logs in.
+    window.__mindoriAuthReady = false;
+    window.__mindoriPendingLogin = false;
+    window.submitTeamLogin = function () {
+        if (!window.__mindoriAuthReady) {
+            window.__mindoriPendingLogin = true;
+            var b = document.querySelector('.btn-submit-login');
+            if (b) { b.disabled = true; b.innerText = 'Connecting...'; }
+            return;
+        }
+        window.__doTeamLogin();
+    };
     document.getElementById('invoiceDate').valueAsDate = new Date();
 
     // Major cities across India (state capitals + significant cities, with
@@ -2809,8 +2835,15 @@
             if (imgHeight <= pageHeight) {
                 // Fits on one page
                 pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
+            } else if (imgHeight <= pageHeight * 1.22) {
+                // Only slightly taller than one page (a normal short invoice whose
+                // footer just spills over). Scale the whole invoice down to fit ONE
+                // page, centered — so there's no near-empty second page with a cut edge.
+                const fitW = imgWidth * (pageHeight / imgHeight);
+                const xOff = (pageWidth - fitW) / 2;
+                pdf.addImage(imgData, 'JPEG', xOff, 0, fitW, pageHeight);
             } else {
-                // Spans multiple pages — slice vertically
+                // Genuinely long invoice (many items) — split across pages
                 let heightLeft = imgHeight;
                 let position = 0;
                 pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
@@ -3058,8 +3091,9 @@
     }
   });
 
-  // 2. Attach login function
-  window.submitTeamLogin = () => {
+  // 2. The real sign-in. The early dispatcher window.submitTeamLogin (defined in the
+  //    classic script above, before this module loads) calls this once Firebase is ready.
+  window.__doTeamLogin = () => {
     const u = document.getElementById('auth-user').value;
     const p = document.getElementById('auth-pass').value;
     const err = document.getElementById('login-error-msg');
@@ -3080,6 +3114,14 @@
         console.error("Login Error:", error.message);
       });
   };
+
+  // Login is ready — enable the button and run any tap queued while Firebase was loading.
+  window.__mindoriAuthReady = true;
+  (function () {
+    var b = document.querySelector('.btn-submit-login');
+    if (b) { b.disabled = false; b.innerText = 'Login'; }
+    if (window.__mindoriPendingLogin) { window.__mindoriPendingLogin = false; window.__doTeamLogin(); }
+  })();
 
   // 3. Attach logout function
   window.logoutTeam = () => {
