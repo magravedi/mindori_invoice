@@ -774,7 +774,8 @@
   // Shared invoice-number counter: one document holds the last number issued; every device
   // reads and increments it, so numbers never collide across devices or tabs. Access is
   // guarded by Firestore security rules — any signed-in team member may read/increment it.
-  const counterRef = doc(db, 'meta', 'invoiceCounter');
+  // Path matches the existing counter document in this project: counters/invoices.lastNumber
+  const counterRef = doc(db, 'counters', 'invoices');
 
   // Peek the next number WITHOUT consuming it (used for the header preview).
   window.__mindoriPeekInvoiceNumber = async () => {
