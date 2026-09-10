@@ -1859,8 +1859,8 @@
             });
         }
         const q = normalizeText(value);
-        // Two characters minimum, or every keystroke lists half the shop's customers.
-        if (q.length < 2 || !customerIndex.length) {
+        // Suggest from the very first letter typed; the list is capped at 8 below.
+        if (q.length < 1 || !customerIndex.length) {
             box.style.display = 'none'; box.innerHTML = ''; return;
         }
 
@@ -3136,14 +3136,23 @@
     // Format username to email if it isn't one already
     const email = u.includes('@') ? u : `${u}@mindori.in`;
 
+    // Record the login timestamp BEFORE signing in. onAuthStateChanged can fire
+    // the instant Firebase authenticates — before this promise's .then runs — and
+    // if no timestamp exists yet, isSessionExpired() treats the brand-new login as
+    // "expired" and signs the user straight back out. That was the real "tap Login
+    // twice" cause: the first tap logged in and got bounced, and only the second
+    // tap saw the timestamp the first one had left behind.
+    localStorage.setItem(SESSION_KEY, Date.now().toString());
+
     // Authenticate with Firebase securely
     signInWithEmailAndPassword(auth, email, p)
-      .then((userCredential) => {
-        // Record the login timestamp so we can enforce expiry
-        localStorage.setItem(SESSION_KEY, Date.now().toString());
+      .then(() => {
         err.style.display = 'none';
       })
       .catch((error) => {
+        // Sign-in failed — undo the optimistic timestamp so a wrong password
+        // never leaves a stale session behind.
+        localStorage.removeItem(SESSION_KEY);
         err.style.display = 'block';
         err.innerText = "Access Denied: Invalid Credentials";
         console.error("Login Error:", error.message);
