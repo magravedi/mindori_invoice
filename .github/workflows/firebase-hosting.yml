@@ -1,0 +1,26 @@
+name: Deploy to Firebase Hosting
+
+# Deploys the site to https://mindori-invoices.web.app on every push to main,
+# giving the same "merge -> live" flow the repo had with GitHub Pages, but at the
+# Firebase Hosting URL. Requires a repo secret FIREBASE_SERVICE_ACCOUNT (a Firebase
+# service-account JSON with the Firebase Hosting Admin role) — see the PR description.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          channelId: live
+          projectId: mindori-invoices
