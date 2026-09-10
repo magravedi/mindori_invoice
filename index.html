@@ -1794,8 +1794,14 @@
     }
 
     // Reuses the same `action=list` endpoint Past Invoices already calls, so no
-    // Apps Script change is needed — it just runs once in the background at login.
+    // Apps Script change is needed. It runs in the background at login, and is
+    // retried lazily the first time the name field is used (see
+    // showCustomerSuggestions) so an early miss — e.g. the sheet key not being
+    // ready yet at login — never leaves auto-fill dead for the whole session.
+    let customersLoading = false;
     async function fetchCustomers() {
+        if (customersLoading) return;   // don't fire duplicate concurrent loads
+        customersLoading = true;
         try {
             const secret = await window.getSheetSecret();
             if (!secret) return;
@@ -1807,6 +1813,8 @@
         } catch (e) {
             console.error('Could not load customers:', e);
             // Non-fatal — the name field still works as a plain text box.
+        } finally {
+            customersLoading = false;
         }
     }
 
@@ -1840,6 +1848,16 @@
     function showCustomerSuggestions(value) {
         const box = document.getElementById('customer-suggest');
         if (!box) return;
+        // Lazily (re)load saved customers the first time the field is touched. The
+        // background load at login can miss (e.g. the sheet key wasn't ready yet),
+        // and we must never leave auto-fill dead for the rest of the session over
+        // one early miss. Re-render once the data lands if the field is still active.
+        if (!customerIndex.length && !customersLoading) {
+            fetchCustomers().then(() => {
+                const el = document.getElementById('custName');
+                if (el && document.activeElement === el) showCustomerSuggestions(el.value);
+            });
+        }
         const q = normalizeText(value);
         // Two characters minimum, or every keystroke lists half the shop's customers.
         if (q.length < 2 || !customerIndex.length) {
