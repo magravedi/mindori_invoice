@@ -2232,11 +2232,28 @@
         listEl.innerHTML = '';
         try {
             const secret = await window.getSheetSecret();
+            // No secret means the app could not read config/sheet -> secret from
+            // Firestore: the document/field is missing, or the security rules block
+            // the read. Past Invoices AND customer auto-fill both depend on it, so
+            // say exactly that instead of a vague "could not load".
+            if (!secret) {
+                statusEl.innerText = '⚠️ Could not read the sheet key from the database (Firestore config/sheet → secret). Past Invoices and customer auto-fill both need it. Fix: make sure that document exists with a field named "secret", and that the Firestore rules let a logged-in user read it.';
+                return;
+            }
             const url = SCRIPT_URL + '?action=list&secret=' + encodeURIComponent(secret);
             const res = await fetch(url, { method: 'GET' });
-            const data = await res.json();
+            const text = await res.text();
+            let data;
+            try { data = JSON.parse(text); }
+            catch (pe) {
+                throw new Error('the Apps Script did not return data (HTTP ' + res.status + '). It replied: ' + text.slice(0, 120));
+            }
+            if (data.status === 'error' && /unauth/i.test(data.message || '')) {
+                statusEl.innerText = '⚠️ The Google Apps Script rejected the request as Unauthorized. The sheet key stored in the database (config/sheet → secret) does not match the SHARED_SECRET in your Apps Script — make the two values identical.';
+                return;
+            }
             if (data.status !== 'success' || !Array.isArray(data.invoices)) {
-                throw new Error(data.message || 'Unexpected response');
+                throw new Error(data.message || 'unexpected response');
             }
             // Newest first
             historyData = data.invoices.reverse();
@@ -2244,7 +2261,7 @@
             statusEl.innerText = historyData.length + ' invoice(s) found.';
         } catch (e) {
             console.error('History fetch error:', e);
-            statusEl.innerText = 'Could not load invoices. Check your connection and that the Apps Script is updated.';
+            statusEl.innerText = 'Could not load invoices — ' + (e && e.message ? e.message : String(e));
         }
     }
     function renderHistory(list) {
