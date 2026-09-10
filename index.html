@@ -286,9 +286,17 @@
         .interactive-link { color: var(--accent); font-weight: 700; text-decoration: underline; display: inline-block; transition: all 0.2s ease; }
         .interactive-link:hover { color: var(--accent-hover); transform: translateY(-1px); }
 
-        .review-link { display: inline-block; margin-top: 10px; color: var(--accent); font-weight: 700; text-decoration: none; font-size: 14px; transition: all 0.2s ease; }
+        .review-link { display: inline-block; margin: 0; color: var(--accent); font-weight: 700; text-decoration: none; font-size: 14px; transition: all 0.2s ease; vertical-align: baseline; }
         .review-link span.text-to-underline { text-decoration: underline; }
         .review-link:hover { color: var(--accent-hover); transform: translateY(-1px); }
+        .contact-info .review-sep { color: var(--text-muted); }
+
+        /* Desktop / PDF: "Review Us On Google" sits inline on the contact line.
+           Mobile: keep it exactly as before — on its own line, separator hidden. */
+        @media (max-width: 640px) {
+            .contact-info .review-sep { display: none; }
+            .review-link { display: block; margin-top: 10px; }
+        }
 
         .btn-add { background: var(--accent); color: white; border: none; padding: 10px 18px; border-radius: 4px; cursor: pointer; font-weight: 700; margin-top: 15px; font-size: 12px; }
         .btn-dl-wrap { text-align: center; margin: 40px 0; }
@@ -419,7 +427,7 @@
             Classic Complex, 420-421, Ghod Dod Rd, Shringar Society, Athwa, Surat, Gujarat 395007<br>
             <span>🌐</span> <a href="https://www.mindori.in" target="_blank" class="interactive-link">www.mindori.in</a> |
             <span>📍</span> <a href="https://www.google.com/maps/dir//Mindori+Bagh,+Classic+Complex,+420-421,+Ghod+Dod+Rd,+Shringar+Society,+Athwa,+Surat,+Gujarat+395007/@21.1874747,72.8137728,15z/data=!4m8!4m7!1m0!1m5!1m1!1s0x3be04d0014b219ad:0xf141a6f2c5944279!2m2!1d72.7952237!2d21.1738258" target="_blank" class="interactive-link">Visit Our Store</a> |
-            <span>📞</span> <a href="tel:9601329228" style="color: var(--text-muted); text-decoration: none;">9601329228</a><br>
+            <span>📞</span> <a href="tel:9601329228" style="color: var(--text-muted); text-decoration: none;">9601329228</a><span class="review-sep"> | </span>
             <a href="https://www.google.com/search?q=Mindori+Bagh+Reviews" target="_blank" class="review-link">
                 🌻 <span class="text-to-underline">Review Us On Google</span>
             </a>
