@@ -515,6 +515,10 @@
         }
         .delete-btn { color: #ef4444; cursor: pointer; font-weight: bold; font-size: 22px; line-height: 1; padding: 6px 8px; user-select: none; }
         .show-on-print { display: none; }
+        /* "Often bought with…" chips under the items table */
+        .upsell { font-size: 12px; color: var(--text-muted); margin: 4px 0 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .upsell-chip { border: 1px solid var(--border); background: #f8fafc; border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: var(--text-dark); font-family: inherit; }
+        .upsell-chip:hover { border-color: var(--primary); color: var(--primary); }
         .pdf-mode .hide-on-print { display: none !important; }
         .pdf-mode .show-on-print { display: inline-block !important; font-size: 14px; color: var(--text-dark); font-weight: 600; font-family: Arial, sans-serif; }
         /* Boxes around the Name/Phone/Date/Instagram VALUES in the PDF, matching the on-screen input boxes */
@@ -1049,6 +1053,7 @@
         <tbody id="invoiceBody"></tbody>
     </table>
     <div class="actions-bar hide-on-print">
+        <div id="upsell-hint" class="upsell hide-on-print" style="display:none;"></div>
         <button class="btn-add" onclick="addNewRow()">+ Add New Item</button>
         <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:center;">
             <label class="toggle-switch">
@@ -1795,7 +1800,9 @@
         if (customersLoading) return;   // don't fire duplicate concurrent loads
         customersLoading = true;
         try {
-            buildCustomerIndex(await window.MindoriDB.listInvoices());
+            const invoices = await window.MindoriDB.listInvoices();
+            buildCustomerIndex(invoices);
+            buildPairIndex(invoices);
         } catch (e) {
             console.error('Could not load customers:', e);
             // Non-fatal — the name field still works as a plain text box.
@@ -1830,6 +1837,66 @@
         });
         customerIndex = Array.from(byKey.values());
     }
+
+    // ==========================================
+    // "OFTEN BOUGHT WITH…" — one-tap add-ons
+    // Built from the saved invoices (the same data auto-fill uses): for every
+    // pair of products that appeared on the same invoice, how often. When an
+    // item is on the invoice, the chips offer its most common partners; tapping
+    // one adds that product as the next line at its catalog price.
+    // ==========================================
+    let pairIndex = new Map();     // normalized name -> [{ key, name, n }] most common first
+    let pairNames = new Map();     // normalized name -> display name
+    function buildPairIndex(invoices) {
+        const counts = new Map();
+        (invoices || []).forEach(inv => {
+            const items = inv.items || [];
+            items.forEach(it => { const k = normalizeText(it.name); if (k) pairNames.set(k, String(it.name).trim()); });
+            const names = Array.from(new Set(items.map(it => normalizeText(it.name)).filter(Boolean)));
+            for (let i = 0; i < names.length; i++) for (let j = 0; j < names.length; j++) {
+                if (i === j) continue;
+                const m = counts.get(names[i]) || new Map();
+                m.set(names[j], (m.get(names[j]) || 0) + 1);
+                counts.set(names[i], m);
+            }
+        });
+        pairIndex = new Map();
+        counts.forEach((m, k) => pairIndex.set(k, Array.from(m, ([key, n]) => ({ key, n, name: pairNames.get(key) || key })).sort((a, b) => b.n - a.n)));
+        updateUpsell();
+    }
+    function updateUpsell() {
+        const box = document.getElementById('upsell-hint');
+        if (!box) return;
+        const onInvoice = invoiceItems.map(it => normalizeText(it.name)).filter(Boolean);
+        if (!onInvoice.length || !pairIndex.size) { box.style.display = 'none'; box.innerHTML = ''; return; }
+        // Pool the partners of every item on the invoice, most common first,
+        // leaving out anything already on it.
+        const pooled = new Map();
+        onInvoice.forEach(k => (pairIndex.get(k) || []).forEach(p => { if (onInvoice.indexOf(p.key) === -1) pooled.set(p.key, (pooled.get(p.key) || 0) + p.n); }));
+        const partners = Array.from(pooled, ([key, n]) => ({ key, n, name: pairNames.get(key) || key })).sort((a, b) => b.n - a.n).slice(0, 3);
+        if (!partners.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+        const anchorName = pairNames.get(onInvoice[onInvoice.length - 1]) || onInvoice[onInvoice.length - 1];
+        box.innerHTML = '💡 Often bought with <b>' + escapeHtml_(onInvoice.length > 1 ? 'these' : anchorName) + '</b>:' +
+            partners.map(p => {
+                const prod = productList.find(x => normalizeText(x.name) === p.key);
+                return '<button type="button" class="upsell-chip" data-upsell="' + escapeHtml_(p.name) + '">＋ ' + escapeHtml_(p.name) +
+                       (prod && prod.price ? ' · ₹' + formatCurrency(prod.price) : '') + '</button>';
+            }).join('');
+        box.style.display = '';
+    }
+    function addUpsell(name) {
+        const prod = productList.find(x => normalizeText(x.name) === normalizeText(name));
+        let idx = invoiceItems.findIndex(it => !String(it.name || '').trim());
+        if (idx === -1) { invoiceItems.push({ name: '', price: 0, qty: 1, discount: 0 }); idx = invoiceItems.length - 1; }
+        invoiceItems[idx].name = name;
+        if (prod) invoiceItems[idx].price = parseFloat(prod.price) || 0;
+        render();
+        showToast('✓ Added ' + name);
+    }
+    document.addEventListener('click', (ev) => {
+        const chip = ev.target && ev.target.closest ? ev.target.closest('[data-upsell]') : null;
+        if (chip) addUpsell(chip.getAttribute('data-upsell'));
+    });
 
     function showCustomerSuggestions(value) {
         const box = document.getElementById('customer-suggest');
@@ -2011,6 +2078,7 @@
         } else {
             discRow.classList.remove('hide-discount');
         }
+        updateUpsell();   // refresh the "often bought with" chips
     }
     // Builds the shared invoice payload from the current form state.
     function buildInvoicePayload() {

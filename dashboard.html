@@ -104,7 +104,7 @@
   .tog[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); }
 
   /* ---------- Hero + stat tiles ---------- */
-  .hero { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr; gap: 16px; align-items: stretch; }
+  .hero { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr 1fr; gap: 16px; align-items: stretch; }
   @media (max-width: 1100px) { .hero { grid-template-columns: 1fr 1fr 1fr; } .hero .big { grid-column: 1 / -1; } }
   @media (max-width: 600px) { .hero { grid-template-columns: 1fr 1fr; } }
   .tile { background: var(--surface); border: 1px solid var(--ring); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); min-width: 0; }
@@ -188,6 +188,24 @@
   .close-x { position: absolute; top: 14px; right: 14px; border: 1px solid var(--ring); background: var(--surface-2); color: var(--ink); border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 16px; }
   @media (max-width: 600px) { .kv { grid-template-columns: 1fr 1fr; } .tabs a { padding: 8px 10px; } }
 
+  /* ---------- Target meter, segments ---------- */
+  .meter { height: 12px; background: var(--surface-2); border-radius: 999px; overflow: hidden; border: 1px solid var(--ring); margin: 10px 0 8px; }
+  .meter > div { height: 100%; background: var(--series); border-radius: 999px; transition: width .6s ease; }
+  .meter.hit > div { background: var(--good); }
+  .pace { font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; }
+  .pace.ok, .pace.hit { color: var(--good); background: var(--good-bg); }
+  .pace.behind { color: #7a5300; background: rgba(250,178,25,0.18); }
+  .seg { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; display: inline-block; background: var(--surface-2); color: var(--ink-2); margin-right: 4px; white-space: nowrap; vertical-align: middle; }
+  .seg.vip { background: var(--brand); color: #fff; }
+  .seg.atrisk { background: rgba(250,178,25,0.18); color: #7a5300; }
+  .seg.lost { background: var(--bad-bg); color: var(--bad); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pace.behind, :root:not([data-theme="light"]) .seg.atrisk { color: #fab219; } }
+  :root[data-theme="dark"] .pace.behind, :root[data-theme="dark"] .seg.atrisk { color: #fab219; }
+  .target-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .target-form input { width: 160px; }
+  .big-pct { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; color: var(--brand-ink); line-height: 1; }
+  .neg { color: var(--bad); }
+
   /* ---------- Motion (staged, once) ---------- */
   .reveal { opacity: 0; transform: translateY(8px); animation: rise .5s ease forwards; }
   @keyframes rise { to { opacity: 1; transform: none; } }
@@ -233,6 +251,18 @@
     <section class="hero" id="hero"></section>
 
     <section class="grid-2">
+      <div class="card reveal" style="animation-delay:.03s">
+        <div class="card-head"><h3>Monthly target</h3><span class="hint" id="target-month"></span></div>
+        <div id="target"></div>
+      </div>
+      <div class="card reveal" style="animation-delay:.06s">
+        <div class="card-head"><h3>New vs returning</h3><span class="hint" id="nvr-hint"></span></div>
+        <div class="chart" id="nvr" style="min-height:80px"></div>
+        <div id="nvr-lines" class="note"></div>
+      </div>
+    </section>
+
+    <section class="grid-2">
       <div class="card reveal" style="animation-delay:.05s">
         <div class="card-head"><h3>Sales</h3><div class="row"><span class="hint" id="trend-hint"></span><button class="tog" data-table="trend" aria-pressed="false">Table</button></div></div>
         <div class="chart" id="trend"></div>
@@ -258,6 +288,17 @@
           </div>
         </div>
         <div class="chart" id="dims"></div>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <div class="card reveal" style="animation-delay:.22s">
+        <div class="card-head"><h3>Win-back</h3><div class="row"><span class="hint" id="winback-hint"></span><button class="tog" data-goto-customers="atrisk">All at-risk →</button></div></div>
+        <div id="winback"></div>
+      </div>
+      <div class="card reveal" style="animation-delay:.24s">
+        <div class="card-head"><h3>Bought together</h3><span class="hint">pairs on the same invoice</span></div>
+        <div id="pairs"></div>
       </div>
     </section>
 
@@ -311,6 +352,10 @@
             <input class="search" id="cust-search" placeholder="Search name, phone, city, Instagram…">
             <select id="cust-filter">
               <option value="all">All customers</option>
+              <option value="vip">★ VIP</option>
+              <option value="regular">Regular (3+ visits)</option>
+              <option value="atrisk">⚠ At-risk (61–120 days)</option>
+              <option value="lost">✕ Lost (120+ days)</option>
               <option value="returning">Returning (2+ visits)</option>
               <option value="new30">New in the last 30 days</option>
               <option value="lapsed90">Not seen for 90+ days</option>
@@ -357,6 +402,7 @@
             <div class="row" style="flex-direction:column;align-items:stretch">
               <input class="search" id="new-name" placeholder="Product name" autocomplete="off">
               <input class="search" id="new-price" type="number" min="0" step="1" placeholder="Price (₹)">
+              <input class="search" id="new-cost" type="number" min="0" step="1" placeholder="Cost price (₹, optional)">
               <input class="search" id="new-cat" placeholder="Category (optional)" list="prod-cat-list" autocomplete="off">
               <datalist id="prod-cat-list"></datalist>
               <button class="btn brand" id="prod-add-btn">＋ Add to catalog</button>
@@ -367,7 +413,7 @@
             <div id="prod-discovered"></div>
           </div>
           <div class="card reveal" style="margin-top:16px">
-            <div class="card-head"><h3>Revenue by category</h3></div>
+            <div class="card-head"><h3 id="cat-title">Revenue by category</h3><button class="tog" id="cat-mode" aria-pressed="false">Profit</button></div>
             <div class="chart" id="prod-bycat" style="min-height:120px"></div>
           </div>
         </div>
@@ -406,7 +452,8 @@
 
   // ---------- state ----------
   const S = { invoices: [], products: [], users: [], me: '', period: '30d', prodMode: 'revenue', dim: 'source', tables: {}, search: '', ctx: { isPreview: false },
-              tab: 'overview', dirty: { overview: true, customers: true, products: true }, custSearch: '', custFilter: 'all', custSort: 'spend', prodSearch: '', prodCat: '', prodSort: 'revenue', editing: null, drawer: null };
+              tab: 'overview', dirty: { overview: true, customers: true, products: true }, custSearch: '', custFilter: 'all', custSort: 'spend', prodSearch: '', prodCat: '', prodSort: 'revenue', editing: null, drawer: null,
+              settings: { targets: {} }, prodCatMode: 'revenue', editTarget: false, targetDraft: '' };
   const PERIODS = [
     { id: 'today', label: 'Today' }, { id: '7d', label: '7 days' }, { id: '30d', label: '30 days' },
     { id: 'mtd', label: 'This month' }, { id: 'ytd', label: 'This year' }, { id: 'all', label: 'All time' }
@@ -630,15 +677,19 @@
     $('periods').innerHTML = PERIODS.map(p => '<button data-p="' + p.id + '" aria-pressed="' + (p.id === S.period) + '">' + p.label + '</button>').join('');
   }
   function renderHero(r) {
-    const k = kpis(r);
+    const k = kpis(r); const gp = grossProfit(r);
     const pl = PERIODS.find(p => p.id === r.id).label.toLowerCase();
     $('hero').innerHTML =
       '<div class="tile big reveal"><div class="k">Sales · ' + esc(pl) + '</div><div class="v" id="kv-rev"></div>' + delta(k.revenue, k.revenuePrev) + '</div>' +
       '<div class="tile reveal" style="animation-delay:.05s"><div class="k">Invoices</div><div class="v" id="kv-cnt"></div>' + delta(k.count, k.countPrev) + '</div>' +
       '<div class="tile reveal" style="animation-delay:.1s"><div class="k">Customers</div><div class="v" id="kv-cus"></div>' + delta(k.customers, k.customersPrev) + '</div>' +
       '<div class="tile reveal" style="animation-delay:.15s"><div class="k">Avg. invoice</div><div class="v" id="kv-avg"></div>' + delta(k.avg, k.avgPrev) + '</div>' +
+      (gp.anyCost
+        ? '<div class="tile reveal" style="animation-delay:.18s"><div class="k">Gross profit · est.</div><div class="v" id="kv-gp"></div>' + delta(gp.profit, gp.prev) + '<div class="s">cost known for ' + (gp.known + gp.unknown ? Math.round(gp.known / (gp.known + gp.unknown) * 100) : 0) + '% of items sold</div></div>'
+        : '<div class="tile reveal" style="animation-delay:.18s"><div class="k">Gross profit</div><div class="v">—</div><div class="s"><a class="link" href="#products">Set cost prices in Products →</a></div></div>') +
       '<div class="tile reveal" style="animation-delay:.2s"><div class="k">Advances pending</div><div class="v" id="kv-adv"></div><div class="s">' + (k.pendingCount ? fmtINR(k.pendingBalance) + ' balance due' : 'nothing outstanding') + '</div></div>';
     countUp($('kv-rev'), k.revenue, fmtINR); countUp($('kv-cnt'), k.count, fmtNum); countUp($('kv-cus'), k.customers, fmtNum); countUp($('kv-avg'), k.avg, fmtINR); $('kv-adv').textContent = fmtNum(k.pendingCount);
+    if (gp.anyCost) countUp($('kv-gp'), gp.profit, fmtINR);
   }
   function renderCharts(r) {
     const tr = trend(r);
@@ -730,10 +781,30 @@
       return c;
     });
   }
+  // Tiers and statuses for the win-back list. VIP = top 10% lifetime spend among
+  // people who came back at least once; At-risk = quiet for 61–120 days; Lost = 120+.
+  function customersSegmented() {
+    const all = customers();
+    const eligible = all.filter(c => c.visits >= 2).sort((a, b) => b.spend - a.spend);
+    const vipN = eligible.length >= 3 ? Math.max(1, Math.round(eligible.length * 0.1)) : 0;
+    const vipKeys = new Set(eligible.slice(0, vipN).map(c => c.key));
+    all.forEach(c => {
+      c.status = c.daysSince === null ? 'active' : c.daysSince > 120 ? 'lost' : c.daysSince > 60 ? 'atrisk' : 'active';
+      c.tier = vipKeys.has(c.key) ? 'VIP' : c.visits >= 3 ? 'Regular' : (c.visits === 1 && c.daysSince !== null && c.daysSince <= 60) ? 'New' : 'Occasional';
+    });
+    return all;
+  }
+  const segPills = (c) => '<span class="seg' + (c.tier === 'VIP' ? ' vip' : '') + '">' + (c.tier === 'VIP' ? '★ VIP' : esc(c.tier)) + '</span>' +
+    (c.status === 'atrisk' ? '<span class="seg atrisk">⚠ At-risk</span>' : c.status === 'lost' ? '<span class="seg lost">✕ Lost</span>' : '');
+  const waText = (c) => encodeURIComponent('Hi ' + (str(c.name).split(' ')[0] || '') + "! It's been a while since your last visit to Mindori 🛍️ We have new arrivals we think you'll love — do drop by! — Team Mindori");
   function customersFiltered() {
     const q = norm(S.custSearch); const t0 = today0(); const iso30 = isoOfDate(addDays(t0, -30)); const mon = t0.getMonth() + 1;
-    let rows = customers();
-    if (S.custFilter === 'returning') rows = rows.filter(c => c.visits >= 2);
+    let rows = customersSegmented();
+    if (S.custFilter === 'vip') rows = rows.filter(c => c.tier === 'VIP');
+    else if (S.custFilter === 'regular') rows = rows.filter(c => c.tier === 'Regular');
+    else if (S.custFilter === 'atrisk') rows = rows.filter(c => c.status === 'atrisk');
+    else if (S.custFilter === 'lost') rows = rows.filter(c => c.status === 'lost');
+    else if (S.custFilter === 'returning') rows = rows.filter(c => c.visits >= 2);
     else if (S.custFilter === 'new30') rows = rows.filter(c => c.first >= iso30);
     else if (S.custFilter === 'lapsed90') rows = rows.filter(c => c.daysSince !== null && c.daysSince >= 90);
     else if (S.custFilter === 'bdaymonth') rows = rows.filter(c => { const m = str(c.birthDate).match(/^\d{1,2}\/(\d{1,2})\//); return m && +m[1] === mon; });
@@ -749,9 +820,9 @@
   function renderCustomers() {
     const rows = customersFiltered(); const all = customers();
     $('cust-count').textContent = rows.length === all.length ? all.length + ' customers' : rows.length + ' of ' + all.length + ' customers';
-    $('cust-table').innerHTML = '<table><thead><tr><th>Name</th><th>Phone</th><th>City</th><th>Source</th><th>Birthday</th><th class="num">Visits</th><th class="num">Lifetime</th><th class="num">Avg</th><th>First</th><th>Last</th><th class="num">Days</th><th>Last bought</th></tr></thead><tbody>' +
-      (rows.length ? rows.map(c => '<tr class="clickable" data-cust="' + esc(c.key) + '"><td><b>' + esc(c.name) + '</b>' + (c.instagramID ? '<div style="font-size:12px;color:var(--muted)">' + esc(c.instagramID) + '</div>' : '') + '</td><td>' + esc(c.phone) + (waLink(c.phone) ? ' <a class="wa" href="' + waLink(c.phone) + '" target="_blank" rel="noopener" title="Message on WhatsApp">WA</a>' : '') + '</td><td>' + esc(c.city) + '</td><td>' + esc(c.source) + '</td><td>' + esc(bdayLabel(c.birthDate)) + '</td><td class="num">' + c.visits + '</td><td class="num"><b>' + fmtINR(c.spend) + '</b></td><td class="num">' + fmtINR(c.avg) + '</td><td>' + esc(fmtDMY(c.first)) + '</td><td>' + esc(fmtDMY(c.last)) + '</td><td class="num">' + (c.daysSince === null ? '' : c.daysSince) + '</td><td>' + esc(c.lastItems.slice(0, 3).join(', ')) + '</td></tr>').join('')
-        : '<tr><td colspan="12" class="empty">' + (all.length ? 'No customers match.' : 'No customers yet — import your Google Sheet from the Overview tab.') + '</td></tr>') + '</tbody></table>';
+    $('cust-table').innerHTML = '<table><thead><tr><th>Name</th><th>Segment</th><th>Phone</th><th>City</th><th>Source</th><th>Birthday</th><th class="num">Visits</th><th class="num">Lifetime</th><th class="num">Avg</th><th>First</th><th>Last</th><th class="num">Days</th><th>Last bought</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(c => '<tr class="clickable" data-cust="' + esc(c.key) + '"><td><b>' + esc(c.name) + '</b>' + (c.instagramID ? '<div style="font-size:12px;color:var(--muted)">' + esc(c.instagramID) + '</div>' : '') + '</td><td>' + segPills(c) + '</td><td>' + esc(c.phone) + (waLink(c.phone) ? ' <a class="wa" href="' + waLink(c.phone) + '" target="_blank" rel="noopener" title="Message on WhatsApp">WA</a>' : '') + '</td><td>' + esc(c.city) + '</td><td>' + esc(c.source) + '</td><td>' + esc(bdayLabel(c.birthDate)) + '</td><td class="num">' + c.visits + '</td><td class="num"><b>' + fmtINR(c.spend) + '</b></td><td class="num">' + fmtINR(c.avg) + '</td><td>' + esc(fmtDMY(c.first)) + '</td><td>' + esc(fmtDMY(c.last)) + '</td><td class="num">' + (c.daysSince === null ? '' : c.daysSince) + '</td><td>' + esc(c.lastItems.slice(0, 3).join(', ')) + '</td></tr>').join('')
+        : '<tr><td colspan="13" class="empty">' + (all.length ? 'No customers match.' : 'No customers yet — import your Google Sheet from the Overview tab.') + '</td></tr>') + '</tbody></table>';
   }
   function openCustomer(key) {
     const c = customers().find(x => x.key === key); if (!c) return;
@@ -788,10 +859,13 @@
     const rows = S.products.filter(p => str(p.name)).map(p => {
       const k = norm(p.name); seen.add(k);
       const st = stats.get(k) || { qty: 0, revenue: 0, invoices: 0, last: '', lastPrice: null };
-      return { key: k, name: str(p.name), category: str(p.category), price: num(p.price), inCatalog: true, qty: st.qty, revenue: st.revenue, invoices: st.invoices, last: st.last, lastPrice: st.lastPrice };
+      const cost = (p.cost === null || p.cost === undefined || p.cost === '') ? null : num(p.cost);
+      const price = num(p.price);
+      return { key: k, name: str(p.name), category: str(p.category), price, cost, inCatalog: true, qty: st.qty, revenue: st.revenue, invoices: st.invoices, last: st.last, lastPrice: st.lastPrice,
+               margin: (cost !== null && price > 0) ? (price - cost) / price : null, profit: cost !== null ? st.revenue - cost * st.qty : null };
     });
     const discovered = Array.from(stats.values()).filter(st => !seen.has(st.key))
-      .map(st => ({ key: st.key, name: st.name, category: '', price: st.lastPrice, inCatalog: false, qty: st.qty, revenue: st.revenue, invoices: st.invoices, last: st.last, lastPrice: st.lastPrice }))
+      .map(st => ({ key: st.key, name: st.name, category: '', price: st.lastPrice, cost: null, margin: null, profit: null, inCatalog: false, qty: st.qty, revenue: st.revenue, invoices: st.invoices, last: st.last, lastPrice: st.lastPrice }))
       .sort((a, b) => b.revenue - a.revenue);
     return { rows, discovered };
   }
@@ -810,35 +884,125 @@
     $('prod-cat-list').innerHTML = cats.filter(c => c !== 'Uncategorised').map(c => '<option value="' + esc(c) + '">').join('');
     const list = productsFiltered(rows);
     $('prod-count').textContent = list.length === rows.length ? rows.length + ' products' : list.length + ' of ' + rows.length + ' products';
-    $('prod-table').innerHTML = '<table><thead><tr><th>Product</th><th>Category</th><th class="num">Price</th><th class="num">Sold</th><th class="num">Revenue</th><th>Last sold</th><th></th></tr></thead><tbody>' +
+    $('prod-table').innerHTML = '<table><thead><tr><th>Product</th><th>Category</th><th class="num">Price</th><th class="num">Cost</th><th class="num">Margin</th><th class="num">Sold</th><th class="num">Revenue</th><th class="num">Profit</th><th>Last sold</th><th></th></tr></thead><tbody>' +
       (list.length ? list.map(p => {
         const editing = S.editing === p.key;
         const drift = (p.lastPrice !== null && p.lastPrice !== undefined && p.invoices && Math.round(p.lastPrice) !== Math.round(p.price)) ? '<div style="font-size:11px;color:var(--muted)">last sold at ' + fmtINR(p.lastPrice) + '</div>' : '';
         return '<tr data-key="' + esc(p.key) + '"><td><b>' + esc(p.name) + '</b></td>' +
           (editing
-            ? '<td><input class="cell-input wide" id="edit-cat" value="' + esc(p.category) + '" list="prod-cat-list" placeholder="Category"></td><td class="num"><input class="cell-input" id="edit-price" type="number" min="0" step="1" value="' + p.price + '"></td>'
-            : '<td>' + (p.category ? esc(p.category) : '<span class="hint">—</span>') + '</td><td class="num">' + fmtINR(p.price) + drift + '</td>') +
-          '<td class="num">' + fmtNum(p.qty) + '</td><td class="num">' + fmtINR(p.revenue) + '</td><td>' + esc(fmtDMY(p.last)) + '</td>' +
+            ? '<td><input class="cell-input wide" id="edit-cat" value="' + esc(p.category) + '" list="prod-cat-list" placeholder="Category"></td><td class="num"><input class="cell-input" id="edit-price" type="number" min="0" step="1" value="' + p.price + '"></td><td class="num"><input class="cell-input" id="edit-cost" type="number" min="0" step="1" placeholder="cost" value="' + (p.cost === null ? '' : p.cost) + '"></td><td class="num"><span class="hint">—</span></td>'
+            : '<td>' + (p.category ? esc(p.category) : '<span class="hint">—</span>') + '</td><td class="num">' + fmtINR(p.price) + drift + '</td><td class="num">' + (p.cost === null ? '<span class="hint">—</span>' : fmtINR(p.cost)) + '</td><td class="num' + (p.margin !== null && p.margin < 0 ? ' neg' : '') + '">' + (p.margin === null ? '<span class="hint">—</span>' : Math.round(p.margin * 100) + '%') + '</td>') +
+          '<td class="num">' + fmtNum(p.qty) + '</td><td class="num">' + fmtINR(p.revenue) + '</td><td class="num' + (p.profit !== null && p.profit < 0 ? ' neg' : '') + '">' + (p.profit === null ? '<span class="hint">—</span>' : fmtINR(p.profit)) + '</td><td>' + esc(fmtDMY(p.last)) + '</td>' +
           '<td style="text-align:right;white-space:nowrap">' + (editing
             ? '<button class="btn brand sm" data-prod-save="' + esc(p.name) + '">Save</button> <button class="btn subtle sm" data-prod-cancel="1">Cancel</button>'
             : '<button class="btn subtle sm" data-prod-edit="' + esc(p.key) + '">Edit</button> <button class="btn danger sm" data-prod-del="' + esc(p.name) + '">Delete</button>') + '</td></tr>';
-      }).join('') : '<tr><td colspan="7" class="empty">' + (rows.length ? 'No products match.' : 'No products in the catalog yet — add one on the right, or import your Google Sheet from the Overview tab.') + '</td></tr>') + '</tbody></table>';
+      }).join('') : '<tr><td colspan="10" class="empty">' + (rows.length ? 'No products match.' : 'No products in the catalog yet — add one on the right, or import your Google Sheet from the Overview tab.') + '</td></tr>') + '</tbody></table>';
     $('prod-discovered').innerHTML = discovered.length
       ? '<div class="list">' + discovered.slice(0, 30).map(p => '<div class="li"><div><div class="t">' + esc(p.name) + '</div><div class="m">' + fmtNum(p.qty) + ' sold · ' + fmtINR(p.revenue) + (p.last ? ' · last ' + esc(fmtDMY(p.last)) : '') + '</div></div><div class="r"><button class="btn brand sm" data-prod-add="' + esc(p.name) + '" data-price="' + (p.lastPrice || 0) + '">＋ Add at ' + fmtINR(p.lastPrice || 0) + '</button></div></div>').join('') + (discovered.length > 30 ? '<div class="note">…and ' + (discovered.length - 30) + ' more</div>' : '') + '</div>'
       : '<div class="empty">Everything that has been sold is already in the catalog.</div>';
+    const profitMode = S.prodCatMode === 'profit';
+    $('cat-title').textContent = profitMode ? 'Profit by category' : 'Revenue by category';
+    $('cat-mode').textContent = profitMode ? 'Revenue' : 'Profit';
     const byCat = new Map();
-    rows.forEach(p => { const c = p.category || 'Uncategorised'; byCat.set(c, (byCat.get(c) || 0) + p.revenue); });
-    discovered.forEach(p => byCat.set('Uncategorised', (byCat.get('Uncategorised') || 0) + p.revenue));
-    barList($('prod-bycat'), Array.from(byCat, ([label, value]) => ({ label, value })).filter(x => x.value > 0).sort((a, b) => b.value - a.value).slice(0, 8), { fmt: fmtINR, aria: 'Revenue by category', empty: 'No sales yet.' });
+    rows.forEach(p => { const c = p.category || 'Uncategorised'; const v = profitMode ? (p.profit === null ? 0 : p.profit) : p.revenue; byCat.set(c, (byCat.get(c) || 0) + v); });
+    if (!profitMode) discovered.forEach(p => byCat.set('Uncategorised', (byCat.get('Uncategorised') || 0) + p.revenue));
+    barList($('prod-bycat'), Array.from(byCat, ([label, value]) => ({ label, value })).filter(x => x.value > 0).sort((a, b) => b.value - a.value).slice(0, 8), { fmt: fmtINR, aria: (profitMode ? 'Profit' : 'Revenue') + ' by category', empty: profitMode ? 'Set cost prices to see profit by category.' : 'No sales yet.' });
   }
   function productsCsv() {
     const { rows, discovered } = products();
-    const H = ['Name','Category','Price','Units Sold','Revenue','Invoices','Last Sold','Last Selling Price','In Catalog'];
-    return [H.join(',')].concat(rows.concat(discovered).map(p => [p.name, p.category, p.price, p.qty, Math.round(p.revenue), p.invoices, fmtDMY(p.last), p.lastPrice === null ? '' : p.lastPrice, p.inCatalog ? 'Yes' : 'No'].map(csvq).join(','))).join('\n');
+    const H = ['Name','Category','Price','Cost','Margin %','Units Sold','Revenue','Profit','Invoices','Last Sold','Last Selling Price','In Catalog'];
+    return [H.join(',')].concat(rows.concat(discovered).map(p => [p.name, p.category, p.price, p.cost === null ? '' : p.cost, p.margin === null ? '' : Math.round(p.margin * 100), p.qty, Math.round(p.revenue), p.profit === null ? '' : Math.round(p.profit), p.invoices, fmtDMY(p.last), p.lastPrice === null ? '' : p.lastPrice, p.inCatalog ? 'Yes' : 'No'].map(csvq).join(','))).join('\n');
   }
   async function productAction(fn, okMsg) {
     const st = $('prod-status'); st.textContent = 'Saving…';
     try { await fn(); st.textContent = okMsg; } catch (e) { st.textContent = 'Could not save — ' + (e && e.message ? e.message : String(e)); }
+  }
+
+  // ==================== TARGET · NEW VS RETURNING · WIN-BACK · PAIRS · PROFIT ====================
+  const monthKey = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+  function renderTarget() {
+    const t0 = today0(); const mk = monthKey(t0); const prevKey = monthKey(new Date(t0.getFullYear(), t0.getMonth() - 1, 1));
+    const targets = (S.settings && S.settings.targets) || {};
+    const own = num(targets[mk]); const inherited = !own ? num(targets[prevKey]) : 0; const target = own || inherited || 0;
+    const mStart = isoOfDate(new Date(t0.getFullYear(), t0.getMonth(), 1)), mEnd = isoOfDate(new Date(t0.getFullYear(), t0.getMonth() + 1, 1)), pStart = isoOfDate(new Date(t0.getFullYear(), t0.getMonth() - 1, 1));
+    const sales = completed().filter(i => inRange(i, mStart, mEnd)).reduce((a, i) => a + i.grandTotal, 0);
+    const lastSales = completed().filter(i => inRange(i, pStart, mStart)).reduce((a, i) => a + i.grandTotal, 0);
+    const dim = new Date(t0.getFullYear(), t0.getMonth() + 1, 0).getDate(), dom = t0.getDate(), left = dim - dom;
+    $('target-month').textContent = MONTHS[t0.getMonth()] + ' ' + t0.getFullYear();
+    let html;
+    if (S.editTarget || !target) {
+      html = '<div class="note">' + (target ? "Change this month's target." : "Set a sales target for this month. It carries over to following months until you change it.") + '</div>' +
+        '<div class="target-form"><input class="search" id="target-input" type="number" min="0" step="1000" placeholder="e.g. 250000" value="' + esc(S.targetDraft || target || '') + '"><button class="btn brand sm" id="target-save">Save target</button>' + (target ? '<button class="btn subtle sm" id="target-cancel">Cancel</button>' : '') + '</div><div class="status" id="target-status"></div>' +
+        (target ? '' : '<div class="note">Last month: ' + fmtINR(lastSales) + ' in sales.</div>');
+    } else {
+      const pct = Math.min(100, sales / target * 100), hit = sales >= target, remaining = Math.max(0, target - sales), onPace = sales >= (target * dom / dim) * 0.97;
+      html = '<div class="row" style="justify-content:space-between;align-items:baseline"><span class="big-pct">' + Math.round(pct) + '%</span><span class="' + (hit ? 'pace hit' : onPace ? 'pace ok' : 'pace behind') + '">' + (hit ? '🎉 Target hit' : onPace ? '✓ On pace' : '⚠ Behind pace') + '</span></div>' +
+        '<div class="meter' + (hit ? ' hit' : '') + '"><div style="width:' + pct.toFixed(1) + '%"></div></div>' +
+        '<div><b>' + fmtINR(sales) + '</b> of ' + fmtINR(target) + (inherited ? ' <span class="hint">(carried over from last month)</span>' : '') + '</div>' +
+        '<div class="note">' + (hit ? 'Beat the target by ' + fmtINR(sales - target) + '. ' : left > 0 ? fmtINR(remaining / left) + ' per day needed for the remaining ' + left + (left === 1 ? ' day. ' : ' days. ') : fmtINR(remaining) + ' short, no days left. ') + 'Last month: ' + fmtINR(lastSales) + (num(targets[prevKey]) ? ' vs a target of ' + fmtINR(num(targets[prevKey])) : '') + '.</div>' +
+        '<div class="row" style="margin-top:8px"><button class="tog" id="target-edit">Change target</button></div>';
+    }
+    $('target').innerHTML = html;
+  }
+
+  // Revenue from a customer's first-ever invoice counts as "new"; every later
+  // invoice is "returning". Works the same for any period, including all-time.
+  function newVsReturning(r) {
+    const firstOf = new Map();
+    completed().forEach(i => { const k = customerKey(i); if (!k) return; const f = firstOf.get(k); if (!f || i.dateISO < f.dateISO || (i.dateISO === f.dateISO && i.number < f.number)) firstOf.set(k, i); });
+    let newRev = 0, retRev = 0; const newC = new Set(), retC = new Set();
+    completed().filter(i => inRange(i, r.startISO, r.endISO)).forEach(i => { const k = customerKey(i); if (firstOf.get(k) === i) { newRev += i.grandTotal; newC.add(k); } else { retRev += i.grandTotal; retC.add(k); } });
+    const all = customers(); const repeaters = all.filter(c => c.visits >= 2).length;
+    const t0 = today0(); const cStart = isoOfDate(addDays(t0, -180)), cEnd = isoOfDate(addDays(t0, -90));
+    const cohort = all.filter(c => c.first && c.first >= cStart && c.first < cEnd);
+    const returned = cohort.filter(c => { const lim = isoOfDate(addDays(dateOfISO(c.first), 90)); return c.invoices.some(i => i.dateISO > c.first && i.dateISO <= lim); }).length;
+    return { newRev, retRev, newCount: newC.size, retCount: retC.size, repeatRate: all.length ? repeaters / all.length : 0, customersTotal: all.length, cohortSize: cohort.length, cohortReturned: returned };
+  }
+  function renderNVR(r) {
+    const d = newVsReturning(r); const tot = d.newRev + d.retRev;
+    barList($('nvr'), tot ? [{ label: 'Returning', value: d.retRev, sub: d.retCount + (d.retCount === 1 ? ' customer' : ' customers') }, { label: 'New', value: d.newRev, sub: d.newCount + ' first-time' }] : [], { fmt: fmtINR, aria: 'Revenue from returning vs new customers', empty: 'No sales in this period.' });
+    $('nvr-hint').textContent = tot ? Math.round(d.retRev / tot * 100) + '% of sales from returning customers' : '';
+    $('nvr-lines').innerHTML = '<b>' + Math.round(d.repeatRate * 100) + '%</b> of all ' + d.customersTotal + ' customers have come back at least once.' +
+      (d.cohortSize >= 5 ? '<br><b>' + Math.round(d.cohortReturned / d.cohortSize * 100) + '%</b> of first-timers from 3–6 months ago returned within 90 days (' + d.cohortReturned + ' of ' + d.cohortSize + ').' : '<br>90-day return rate: not enough history yet (needs first-time customers from 3–6 months ago).');
+  }
+
+  function renderWinback() {
+    const segs = customersSegmented();
+    const atRisk = segs.filter(c => c.status === 'atrisk').sort((a, b) => ((b.tier === 'VIP') - (a.tier === 'VIP')) || b.spend - a.spend);
+    const lost = segs.filter(c => c.status === 'lost');
+    $('winback-hint').textContent = atRisk.length ? atRisk.length + ' at risk · ' + fmtINR(atRisk.reduce((a, c) => a + c.spend, 0)) + ' lifetime' : '';
+    $('winback').innerHTML = (atRisk.length
+      ? '<div class="list">' + atRisk.slice(0, 8).map(c => '<div class="li"><div><div class="t">' + esc(c.name) + ' ' + segPills(c) + '</div><div class="m">last visit ' + c.daysSince + ' days ago · ' + c.visits + (c.visits === 1 ? ' visit' : ' visits') + ' · ' + fmtINR(c.spend) + ' lifetime</div></div><div class="r">' + (waLink(c.phone) ? '<a class="btn brand sm" href="' + waLink(c.phone) + '?text=' + waText(c) + '" target="_blank" rel="noopener">💬 Win back</a>' : '<span class="hint">no phone</span>') + '</div></div>').join('') + '</div>'
+      : '<div class="empty">Nobody is slipping away — every customer has visited in the last 60 days.</div>') +
+      (lost.length ? '<div class="note">' + lost.length + ' more haven\'t visited in over 120 days (' + fmtINR(lost.reduce((a, c) => a + c.spend, 0)) + ' lifetime) <button class="tog" data-goto-customers="lost">See them →</button></div>' : '');
+  }
+
+  function pairs() {
+    const counts = new Map(), single = new Map(), names = new Map();
+    completed().forEach(inv => {
+      inv.items.forEach(it => { const k = norm(it.name); if (k) names.set(k, it.name); });
+      const ks = Array.from(new Set(inv.items.map(it => norm(it.name)).filter(Boolean)));
+      ks.forEach(k => single.set(k, (single.get(k) || 0) + 1));
+      if (ks.length < 2) return; ks.sort();
+      for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) { const key = ks[i] + '||' + ks[j]; const p = counts.get(key) || { a: ks[i], b: ks[j], n: 0 }; p.n++; counts.set(key, p); }
+    });
+    return Array.from(counts.values()).sort((x, y) => y.n - x.n).slice(0, 8).map(p => ({ a: names.get(p.a) || p.a, b: names.get(p.b) || p.b, n: p.n, pctA: p.n / single.get(p.a), pctB: p.n / single.get(p.b) }));
+  }
+  function renderPairs() {
+    const ps = pairs();
+    $('pairs').innerHTML = ps.length
+      ? '<div class="list">' + ps.map(p => '<div class="li"><div><div class="t">' + esc(p.a) + ' <span class="hint">+</span> ' + esc(p.b) + '</div><div class="m">in ' + Math.round(p.pctA * 100) + '% of ' + esc(p.a) + ' invoices · ' + Math.round(p.pctB * 100) + '% of ' + esc(p.b) + ' invoices</div></div><div class="r"><b>' + p.n + '×</b> together</div></div>').join('') + '</div><div class="note">The invoice page suggests these as one-tap add-ons when an item is picked.</div>'
+      : '<div class="empty">No invoices with two or more different items yet.</div>';
+  }
+
+  // Cost prices live on the catalog; profit uses the price actually charged.
+  function costIndex() { const m = new Map(); S.products.forEach(p => { if (str(p.name) && p.cost !== null && p.cost !== undefined && p.cost !== '') m.set(norm(p.name), num(p.cost)); }); return m; }
+  function grossProfit(r) {
+    const cost = costIndex();
+    const calc = (arr) => { let profit = 0, known = 0, unknown = 0; arr.forEach(i => i.items.forEach(it => { const c = cost.get(norm(it.name)); const rev = it.price * it.qty * (1 - it.discount / 100); if (c === undefined) { unknown += it.qty; return; } known += it.qty; profit += rev - c * it.qty; })); return { profit, known, unknown }; };
+    const cur = calc(completed().filter(i => inRange(i, r.startISO, r.endISO)));
+    const prev = r.prevStartISO ? calc(completed().filter(i => inRange(i, r.prevStartISO, r.prevEndISO))) : null;
+    return { profit: cur.profit, prev: prev ? prev.profit : null, known: cur.known, unknown: cur.unknown, anyCost: cost.size > 0 };
   }
 
   // ==================== TABS ====================
@@ -855,7 +1019,7 @@
     if (!force && !S.dirty[t]) return;
     if (t === 'customers') renderCustomers();
     else if (t === 'products') renderProducts();
-    else { const r = rangeFor(S.period); renderPeriods(); renderHero(r); renderCharts(r); renderBirthdays(); renderAdvances(); renderRecent(); renderTeam(); renderData(); }
+    else { const r = rangeFor(S.period); renderPeriods(); renderHero(r); renderTarget(); renderNVR(r); renderCharts(r); renderWinback(); renderPairs(); renderBirthdays(); renderAdvances(); renderRecent(); renderTeam(); renderData(); }
     S.dirty[t] = false;
   }
   function render() {
@@ -873,13 +1037,23 @@
     else if (b.id === 'prod-export') download('mindori-products-' + isoOfDate(new Date()) + '.csv', productsCsv());
     else if (b.dataset.prodEdit) { S.editing = b.dataset.prodEdit; renderProducts(); }
     else if (b.dataset.prodCancel) { S.editing = null; renderProducts(); }
-    else if (b.dataset.prodSave) { const name = b.dataset.prodSave, price = $('edit-price').value, category = $('edit-cat').value; S.editing = null; productAction(() => window.Dash.api.saveProduct({ name, price, category }), '✓ Saved ' + name + '.'); }
+    else if (b.dataset.prodSave) { const name = b.dataset.prodSave, price = $('edit-price').value, category = $('edit-cat').value, cost = $('edit-cost').value; S.editing = null; productAction(() => window.Dash.api.saveProduct({ name, price, category, cost }), '✓ Saved ' + name + '.'); }
+    else if (b.id === 'cat-mode') { S.prodCatMode = S.prodCatMode === 'profit' ? 'revenue' : 'profit'; renderProducts(); }
+    else if (b.id === 'target-edit') { S.editTarget = true; S.targetDraft = ''; renderTarget(); }
+    else if (b.id === 'target-cancel') { S.editTarget = false; S.targetDraft = ''; renderTarget(); }
+    else if (b.id === 'target-save') {
+      const v = parseFloat($('target-input').value); const st = $('target-status');
+      if (!(v > 0)) { st.textContent = 'Enter a target amount in rupees.'; return; }
+      st.textContent = 'Saving…'; S.targetDraft = String(v); S.editTarget = false;
+      window.Dash.api.saveTarget(monthKey(today0()), v).then(() => { S.targetDraft = ''; }).catch(e => { S.editTarget = true; renderTarget(); $('target-status').textContent = 'Could not save — ' + (e && e.message ? e.message : String(e)) + (/permission/i.test(String(e && e.message)) ? '. Publish the updated Firestore rules (they add a "settings" collection).' : ''); });
+    }
+    else if (b.dataset.gotoCustomers) { S.custFilter = b.dataset.gotoCustomers; const f = $('cust-filter'); if (f) f.value = S.custFilter; S.dirty.customers = true; location.hash = '#customers'; }
     else if (b.dataset.prodDel) { const name = b.dataset.prodDel; if (confirm('Remove "' + name + '" from the catalog?\n\nPast invoices are not affected.')) productAction(() => window.Dash.api.deleteProduct(name), '✓ Removed ' + name + ' from the catalog.'); }
     else if (b.dataset.prodAdd) { const name = b.dataset.prodAdd; productAction(() => window.Dash.api.saveProduct({ name, price: b.dataset.price, category: '' }), '✓ Added ' + name + ' to the catalog.'); }
     else if (b.id === 'prod-add-btn') {
-      const name = $('new-name').value.trim(), price = $('new-price').value, category = $('new-cat').value.trim();
+      const name = $('new-name').value.trim(), price = $('new-price').value, category = $('new-cat').value.trim(), cost = $('new-cost').value;
       if (!name) { $('prod-status').textContent = 'Give the product a name first.'; return; }
-      productAction(async () => { await window.Dash.api.saveProduct({ name, price, category }); $('new-name').value = ''; $('new-price').value = ''; $('new-cat').value = ''; }, '✓ Added ' + name + ' to the catalog.');
+      productAction(async () => { await window.Dash.api.saveProduct({ name, price, category, cost }); $('new-name').value = ''; $('new-price').value = ''; $('new-cat').value = ''; $('new-cost').value = ''; }, '✓ Added ' + name + ' to the catalog.');
     }
     else if (b.dataset.table) { S.tables[b.dataset.table] = !S.tables[b.dataset.table]; b.setAttribute('aria-pressed', String(!!S.tables[b.dataset.table])); renderCharts(rangeFor(S.period)); }
     else if (b.dataset.dim) { S.dim = b.dataset.dim; document.querySelectorAll('#dim-tabs [data-dim]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); renderCharts(rangeFor(S.period)); }
@@ -914,7 +1088,7 @@
   window.Dash = {
     setData(invoices, products, users, ctx) {
       S.invoices = (invoices || []).map(normalizeInvoice); S.products = products || []; S.users = users || [];
-      if (ctx) { S.ctx = Object.assign(S.ctx, ctx); if (ctx.me) S.me = ctx.me; }
+      if (ctx) { S.ctx = Object.assign(S.ctx, ctx); if (ctx.me) S.me = ctx.me; if (ctx.settings) S.settings = ctx.settings; }
       S.dirty = { overview: true, customers: true, products: true };
       $('preview-badge').hidden = !S.ctx.isPreview;
       $('who').textContent = S.me || '';
@@ -970,8 +1144,8 @@
   }
 
   async function loadAll() {
-    const [inv, prod, users] = await Promise.all([getDocs(col('invoices')), getDocs(col('products')), getDocs(collection(db, 'users'))]);
-    Dash.setData(inv.docs.map(d => d.data()), prod.docs.map(d => d.data()), users.docs.map(d => Object.assign({ email: d.id }, d.data())), { isPreview: IS_PREVIEW, me });
+    const [inv, prod, users, tg] = await Promise.all([getDocs(col('invoices')), getDocs(col('products')), getDocs(collection(db, 'users')), getDoc(doc(col('settings'), 'targets')).catch(() => null)]);
+    Dash.setData(inv.docs.map(d => d.data()), prod.docs.map(d => d.data()), users.docs.map(d => Object.assign({ email: d.id }, d.data())), { isPreview: IS_PREVIEW, me, settings: { targets: (tg && tg.exists()) ? tg.data() : {} } });
   }
 
   onAuthStateChanged(auth, async (user) => {
@@ -997,7 +1171,14 @@
     async saveProduct(p) {
       const name = String(p.name || '').trim(); if (!name) throw new Error('Product needs a name');
       const price = parseFloat(p.price);
-      await setDoc(doc(col('products'), productKey(name)), { name, price: isNaN(price) ? 0 : price, category: String(p.category || '').trim(), updatedAt: Date.now(), updatedBy: me }, { merge: true });
+      const costRaw = (p.cost === undefined || p.cost === null) ? '' : String(p.cost).trim();
+      const data = { name, price: isNaN(price) ? 0 : price, category: String(p.category || '').trim(), updatedAt: Date.now(), updatedBy: me };
+      if (costRaw !== '') { const c = parseFloat(costRaw); data.cost = isNaN(c) ? null : c; } else if (p.cost !== undefined) { data.cost = null; }
+      await setDoc(doc(col('products'), productKey(name)), data, { merge: true });
+      await loadAll(); Dash.render();
+    },
+    async saveTarget(mk, amount) {
+      await setDoc(doc(col('settings'), 'targets'), { [mk]: amount, updatedAt: Date.now(), updatedBy: me }, { merge: true });
       await loadAll(); Dash.render();
     },
     async deleteProduct(name) {

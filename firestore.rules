@@ -57,6 +57,16 @@ service cloud.firestore {
       allow read, write: if signedIn();
     }
 
+    // Dashboard settings (monthly sales targets). Admins write, everyone reads.
+    match /settings/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /preview_settings/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
     // Legacy: the Google Sheet key, read only by the dashboard's one-time
     // "Import from Google Sheet" tool.
     match /config/{docId} {
