@@ -1,0 +1,76 @@
+rules_version = '2';
+
+// Mindori Invoice — Firestore security rules.
+//
+// Roles live in the `users` collection, keyed by the login email, so an admin
+// manages teammates by email from the dashboard (no user IDs involved).
+// The very first admin is created once in the Firebase console:
+//   users / <your-login-email> / role = "admin"
+// Everyone signed in without an entry is ordinary staff.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function loginEmail() {
+      return request.auth.token.email.lower();
+    }
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(loginEmail()))
+        && get(/databases/$(database)/documents/users/$(loginEmail())).data.role == 'admin';
+    }
+
+    // Team roster. Anyone signed in may read it (the app looks up its own role);
+    // only admins may change it.
+    match /users/{userEmail} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Invoices and the product catalog: every team member creates, reads and
+    // edits (saving, reprinting/editing, adding stock); only admins delete.
+    match /invoices/{invoiceId} {
+      allow read, create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+    match /products/{productId} {
+      allow read, create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+
+    // The preview site (…--pr<N>….web.app) keeps its own separate copies of the
+    // data, so trying things there never touches the live invoices.
+    match /preview_invoices/{invoiceId} {
+      allow read, create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+    match /preview_products/{productId} {
+      allow read, create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Invoice number counters (live: counters/invoices, preview: counters/preview_invoices).
+    match /counters/{counterId} {
+      allow read, write: if signedIn();
+    }
+
+    // Dashboard settings (monthly sales targets). Admins write, everyone reads.
+    match /settings/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /preview_settings/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Legacy: the Google Sheet key, read only by the dashboard's one-time
+    // "Import from Google Sheet" tool.
+    match /config/{docId} {
+      allow read: if signedIn();
+    }
+  }
+}

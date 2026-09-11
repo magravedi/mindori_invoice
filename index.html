@@ -515,6 +515,10 @@
         }
         .delete-btn { color: #ef4444; cursor: pointer; font-weight: bold; font-size: 22px; line-height: 1; padding: 6px 8px; user-select: none; }
         .show-on-print { display: none; }
+        /* "Often bought with…" chips under the items table */
+        .upsell { font-size: 12px; color: var(--text-muted); margin: 4px 0 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .upsell-chip { border: 1px solid var(--border); background: #f8fafc; border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: var(--text-dark); font-family: inherit; }
+        .upsell-chip:hover { border-color: var(--primary); color: var(--primary); }
         .pdf-mode .hide-on-print { display: none !important; }
         .pdf-mode .show-on-print { display: inline-block !important; font-size: 14px; color: var(--text-dark); font-weight: 600; font-family: Arial, sans-serif; }
         /* Boxes around the Name/Phone/Date/Instagram VALUES in the PDF, matching the on-screen input boxes */
@@ -873,6 +877,7 @@
             grid-template-columns: 1fr 1fr !important;
         }
         .pdf-mode .detail-row { display: flex !important; flex-wrap: nowrap !important; }
+            .dash-link { text-decoration: none; display: inline-flex; align-items: center; margin-right: 8px; }
     </style>
 </head>
 <body>
@@ -961,6 +966,7 @@
             <div class="invoice-number-text" id="displayInvoiceNum">Loading…</div>
             <div class="user-bar hide-on-print">
                 <span id="loggedInUser" class="logged-user"></span>
+                <a id="dash-link" class="btn-logout dash-link" href="/dashboard" style="display:none;">📊 Dashboard</a>
                 <button class="btn-logout" onclick="logoutTeam()">Logout</button>
             </div>
         </div>
@@ -1047,6 +1053,7 @@
         <tbody id="invoiceBody"></tbody>
     </table>
     <div class="actions-bar hide-on-print">
+        <div id="upsell-hint" class="upsell hide-on-print" style="display:none;"></div>
         <button class="btn-add" onclick="addNewRow()">+ Add New Item</button>
         <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:center;">
             <label class="toggle-switch">
@@ -1107,7 +1114,7 @@
 </div>
 <div class="btn-dl-wrap hide-on-print">
     <button id="dl-button" class="btn-dl" onclick="generatePDF()">DOWNLOAD INVOICE (PDF)</button>
-    <button id="save-button" class="btn-save" onclick="saveOnly()">SAVE TO SHEET</button>
+    <button id="save-button" class="btn-save" onclick="saveOnly()">SAVE INVOICE</button>
     <button id="history-button" class="btn-history" onclick="openHistory()">📋 PAST INVOICES</button>
     <button id="advance-button" class="btn-advance" onclick="openAdvanceModal()">💰 ADVANCE INVOICES</button>
     <button id="save-advance-button" class="btn-save-advance" onclick="saveAdvanceInvoice()" style="display:none;">💰 SAVE ADVANCE INVOICE</button>
@@ -1118,7 +1125,6 @@
      5. SCRIPTS CONTROLLER
      ========================================== -->
 <script>
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzh-MfzDY9uiEaixCQ36yWYzTh0lvUk3GltFDkQ9Vw9VINy1pOUta9Nh3HibFNXPn_S/exec';
 
     // --- Login dispatcher: fixes the "tap Login twice" issue ---
     // The real sign-in (window.__doTeamLogin) lives in the Firebase module below,
@@ -1136,6 +1142,13 @@
         }
         window.__doTeamLogin();
     };
+    // Fresh page after a save. Drops a ?reprint=… deep link (so the same invoice
+    // doesn't reopen) while keeping an admin on the invoice page (?invoice=1).
+    function reloadFresh() {
+        const params = new URLSearchParams(location.search);
+        if (params.has('reprint') || params.has('invoice')) { location.replace('/?invoice=1'); }
+        else { reloadFresh(); }
+    }
     document.getElementById('invoiceDate').valueAsDate = new Date();
 
     // Major cities across India (state capitals + significant cities, with
@@ -1364,14 +1377,7 @@
     // ==========================================
     async function fetchProducts() {
         try {
-            const secret = await window.getSheetSecret();
-            if (!secret) return;
-            const url = SCRIPT_URL + '?action=products&secret=' + encodeURIComponent(secret);
-            const res = await fetch(url, { method: 'GET' });
-            const data = await res.json();
-            if (data.status === 'success' && Array.isArray(data.products)) {
-                productList = data.products;
-            }
+            productList = await window.MindoriDB.listProducts();
         } catch (e) {
             console.error('Could not load products:', e);
             // Non-fatal — typing still works, just no suggestions
@@ -1590,17 +1596,11 @@
         calculate();
         showToast('✓ "' + cleanName + '" added to stock list');
 
-        // Background write to the Products sheet. On failure, roll the product
+        // Background write to the product catalog. On failure, roll the product
         // back out of the local catalog so it doesn't look saved when it isn't.
         (async () => {
             try {
-                const secret = await window.getSheetSecret();
-                if (!secret) throw new Error('Sheet secret not available');
-                await postPayload({
-                    secret: secret,
-                    action: 'addProduct',
-                    product: { name: cleanName, price: price, category: category }
-                });
+                await window.MindoriDB.addProduct({ name: cleanName, price: price, category: category });
             } catch (e) {
                 console.error('Could not add product to stock:', e);
                 const at = productList.indexOf(newProduct);
@@ -1745,17 +1745,15 @@
 
         flushingQueue = true;
         try {
-            const secret = await window.getSheetSecret();
-            if (!secret) return;
             const remaining = [];
             let sent = 0;
             for (const entry of q) {
                 try {
-                    await postPayload(Object.assign({}, entry.payload, { secret: secret }));
+                    await window.MindoriDB.saveInvoice(entry.payload);
                     sent++;
                 } catch (e) {
-                    // Keep it queued — a failure here is almost always the network
-                    // or a stale secret, both of which resolve on a later attempt.
+                    // Keep it queued — a failure here is almost always the network,
+                    // which resolves on a later attempt.
                     console.error('Retry failed for', entry.payload && entry.payload.invoiceID, e);
                     remaining.push(entry);
                 }
@@ -1793,23 +1791,18 @@
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
-    // Reuses the same `action=list` endpoint Past Invoices already calls, so no
-    // Apps Script change is needed. It runs in the background at login, and is
-    // retried lazily the first time the name field is used (see
-    // showCustomerSuggestions) so an early miss — e.g. the sheet key not being
-    // ready yet at login — never leaves auto-fill dead for the whole session.
+    // Reads the saved invoices (the same data Past Invoices shows). It runs in the
+    // background at login, and is retried lazily the first time the name field is
+    // used (see showCustomerSuggestions) so an early miss never leaves auto-fill
+    // dead for the whole session.
     let customersLoading = false;
     async function fetchCustomers() {
         if (customersLoading) return;   // don't fire duplicate concurrent loads
         customersLoading = true;
         try {
-            const secret = await window.getSheetSecret();
-            if (!secret) return;
-            const url = SCRIPT_URL + '?action=list&secret=' + encodeURIComponent(secret);
-            const res = await fetch(url, { method: 'GET' });
-            const data = await res.json();
-            if (data.status !== 'success' || !Array.isArray(data.invoices)) return;
-            buildCustomerIndex(data.invoices);
+            const invoices = await window.MindoriDB.listInvoices();
+            buildCustomerIndex(invoices);
+            buildPairIndex(invoices);
         } catch (e) {
             console.error('Could not load customers:', e);
             // Non-fatal — the name field still works as a plain text box.
@@ -1844,6 +1837,66 @@
         });
         customerIndex = Array.from(byKey.values());
     }
+
+    // ==========================================
+    // "OFTEN BOUGHT WITH…" — one-tap add-ons
+    // Built from the saved invoices (the same data auto-fill uses): for every
+    // pair of products that appeared on the same invoice, how often. When an
+    // item is on the invoice, the chips offer its most common partners; tapping
+    // one adds that product as the next line at its catalog price.
+    // ==========================================
+    let pairIndex = new Map();     // normalized name -> [{ key, name, n }] most common first
+    let pairNames = new Map();     // normalized name -> display name
+    function buildPairIndex(invoices) {
+        const counts = new Map();
+        (invoices || []).forEach(inv => {
+            const items = inv.items || [];
+            items.forEach(it => { const k = normalizeText(it.name); if (k) pairNames.set(k, String(it.name).trim()); });
+            const names = Array.from(new Set(items.map(it => normalizeText(it.name)).filter(Boolean)));
+            for (let i = 0; i < names.length; i++) for (let j = 0; j < names.length; j++) {
+                if (i === j) continue;
+                const m = counts.get(names[i]) || new Map();
+                m.set(names[j], (m.get(names[j]) || 0) + 1);
+                counts.set(names[i], m);
+            }
+        });
+        pairIndex = new Map();
+        counts.forEach((m, k) => pairIndex.set(k, Array.from(m, ([key, n]) => ({ key, n, name: pairNames.get(key) || key })).sort((a, b) => b.n - a.n)));
+        updateUpsell();
+    }
+    function updateUpsell() {
+        const box = document.getElementById('upsell-hint');
+        if (!box) return;
+        const onInvoice = invoiceItems.map(it => normalizeText(it.name)).filter(Boolean);
+        if (!onInvoice.length || !pairIndex.size) { box.style.display = 'none'; box.innerHTML = ''; return; }
+        // Pool the partners of every item on the invoice, most common first,
+        // leaving out anything already on it.
+        const pooled = new Map();
+        onInvoice.forEach(k => (pairIndex.get(k) || []).forEach(p => { if (onInvoice.indexOf(p.key) === -1) pooled.set(p.key, (pooled.get(p.key) || 0) + p.n); }));
+        const partners = Array.from(pooled, ([key, n]) => ({ key, n, name: pairNames.get(key) || key })).sort((a, b) => b.n - a.n).slice(0, 3);
+        if (!partners.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+        const anchorName = pairNames.get(onInvoice[onInvoice.length - 1]) || onInvoice[onInvoice.length - 1];
+        box.innerHTML = '💡 Often bought with <b>' + escapeHtml_(onInvoice.length > 1 ? 'these' : anchorName) + '</b>:' +
+            partners.map(p => {
+                const prod = productList.find(x => normalizeText(x.name) === p.key);
+                return '<button type="button" class="upsell-chip" data-upsell="' + escapeHtml_(p.name) + '">＋ ' + escapeHtml_(p.name) +
+                       (prod && prod.price ? ' · ₹' + formatCurrency(prod.price) : '') + '</button>';
+            }).join('');
+        box.style.display = '';
+    }
+    function addUpsell(name) {
+        const prod = productList.find(x => normalizeText(x.name) === normalizeText(name));
+        let idx = invoiceItems.findIndex(it => !String(it.name || '').trim());
+        if (idx === -1) { invoiceItems.push({ name: '', price: 0, qty: 1, discount: 0 }); idx = invoiceItems.length - 1; }
+        invoiceItems[idx].name = name;
+        if (prod) invoiceItems[idx].price = parseFloat(prod.price) || 0;
+        render();
+        showToast('✓ Added ' + name);
+    }
+    document.addEventListener('click', (ev) => {
+        const chip = ev.target && ev.target.closest ? ev.target.closest('[data-upsell]') : null;
+        if (chip) addUpsell(chip.getAttribute('data-upsell'));
+    });
 
     function showCustomerSuggestions(value) {
         const box = document.getElementById('customer-suggest');
@@ -2025,9 +2078,10 @@
         } else {
             discRow.classList.remove('hide-discount');
         }
+        updateUpsell();   // refresh the "often bought with" chips
     }
     // Builds the shared invoice payload from the current form state.
-    function buildInvoicePayload(secret) {
+    function buildInvoicePayload() {
         const validItems = invoiceItems.filter(item => item.name.trim() !== "");
         // Read birth date directly from the input and format as DD/MM/YYYY
         let birthDateStr = '';
@@ -2037,7 +2091,6 @@
             birthDateStr = `${bd}/${bm}/${by}`;
         }
         return {
-            secret: secret,
             invoiceID: document.getElementById('displayInvoiceNum').innerText,
             createdBy: window.loggedInUsername || '',
             date: document.getElementById('printDate').innerText,
@@ -2061,55 +2114,18 @@
         };
     }
 
-    // Posts to the Apps Script and CONFIRMS the write.
-    // The Apps Script returns Access-Control-Allow-Origin: *, so we can read the
-    // JSON reply. (This used to run in mode:'no-cors', which made every response
-    // opaque — a rejected or failed save still looked like a success.)
-    // Content-Type stays text/plain so this remains a CORS "simple request"
-    // and no preflight OPTIONS is sent (Apps Script does not answer preflights).
-    async function postPayload(payload) {
-        const res = await fetch(SCRIPT_URL, {
-            method: 'POST',
-            cache: 'no-cache',
-            redirect: 'follow',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify(payload)
-        });
-        if (!res.ok) throw new Error('Server returned HTTP ' + res.status);
-        let data;
-        try {
-            data = await res.json();
-        } catch (e) {
-            throw new Error('Server sent an unreadable response');
-        }
-        if (!data || data.status !== 'success') {
-            // Carry the parsed reply on the error so callers can distinguish
-            // kinds of rejection (e.g. a duplicate product vs a real failure).
-            const err = new Error((data && data.message) || 'The sheet rejected the save');
-            err.data = data;
-            throw err;
-        }
-        return data;
-    }
-
-    async function saveToSheet() {
-        if (!SCRIPT_URL || SCRIPT_URL.includes('edit')) return;
+    // Saves the invoice on screen to Firestore — one document per invoice number.
+    // Saving the same number again (editing a past invoice) updates that invoice
+    // in place; it never creates a duplicate.
+    async function persistInvoice() {
         const validItems = invoiceItems.filter(item => item.name.trim() !== "");
         if (validItems.length === 0) return;
-
-        let secret = null;
-        if (typeof window.getSheetSecret === 'function') {
-            secret = await window.getSheetSecret();
-        }
-        if (!secret) {
-            throw new Error("Sheet secret not available — cannot save to the sheet.");
-        }
-        const payload = buildInvoicePayload(secret);
+        const payload = buildInvoicePayload();
         // Errors deliberately propagate to the caller so the UI can report a
         // failed save instead of showing a false "SAVED" — but the payload is
         // parked in the retry queue first, so a numbered invoice is never lost.
         try {
-            await postPayload(payload);
+            await window.MindoriDB.saveInvoice(payload);
         } catch (e) {
             queueSave(payload);
             e.queued = true;
@@ -2180,58 +2196,63 @@
 
         btn.disabled = true;
         dlBtn.disabled = true;
-        btn.innerText = "RESERVING NUMBER…";
 
-        // Atomically claim the final invoice number from Firestore
-        try {
-            if (typeof window.claimNextInvoiceNumber !== 'function') {
-                throw new Error("Counter service not ready. Please refresh and try again.");
+        if (reprintMode) {
+            // Editing a past invoice: keep its number and update it in place.
+            formattedInvoiceID = document.getElementById('displayInvoiceNum').innerText;
+        } else {
+            btn.innerText = "RESERVING NUMBER…";
+            // Atomically claim the next invoice number from Firestore
+            try {
+                if (typeof window.claimNextInvoiceNumber !== 'function') {
+                    throw new Error("Counter service not ready. Please refresh and try again.");
+                }
+                currentInvoiceNum = await window.claimNextInvoiceNumber();
+                formattedInvoiceID = "MIN-" + currentInvoiceNum.toString().padStart(7, '0');
+                document.getElementById('displayInvoiceNum').innerText = formattedInvoiceID;
+            } catch (e) {
+                console.error("Failed to claim invoice number:", e);
+                alert("Could not reserve invoice number. Check your connection and try again.");
+                btn.disabled = false;
+                dlBtn.disabled = false;
+                btn.innerText = "SAVE INVOICE";
+                return;
             }
-            currentInvoiceNum = await window.claimNextInvoiceNumber();
-            formattedInvoiceID = "MIN-" + currentInvoiceNum.toString().padStart(7, '0');
-            document.getElementById('displayInvoiceNum').innerText = formattedInvoiceID;
-        } catch (e) {
-            console.error("Failed to claim invoice number:", e);
-            alert("Could not reserve invoice number. Check your connection and try again.");
-            btn.disabled = false;
-            dlBtn.disabled = false;
-            btn.innerText = "SAVE TO SHEET";
-            return;
         }
 
         calculate();
         btn.innerText = "SAVING…";
 
         try {
-            await saveToSheet();
+            await persistInvoice();
         } catch (e) {
             // The invoice number is already claimed at this point, so DON'T reload —
             // that would throw away the typed invoice. Leave the form intact so the
             // user can simply tap Save again once the connection is back.
             console.error("Save Error:", e);
-            btn.innerText = "SAVE TO SHEET";
+            btn.innerText = "SAVE INVOICE";
             btn.disabled = false;
             dlBtn.disabled = false;
-            alert("Could not save to the sheet:\n\n" + e.message +
+            alert("Could not save the invoice:\n\n" + e.message +
                   (e.queued
                     ? "\n\nInvoice " + formattedInvoiceID + " has been queued and will send itself " +
                       "automatically once the connection is back. You can close the page safely."
-                    : "\n\nInvoice " + formattedInvoiceID + " is still on screen — tap SAVE TO SHEET again to retry."));
+                    : "\n\nInvoice " + formattedInvoiceID + " is still on screen — tap SAVE INVOICE again to retry."));
             return;
         }
 
-        btn.innerText = "✓ SAVED";
+        btn.innerText = reprintMode ? "✓ UPDATED" : "✓ SAVED";
         setTimeout(() => {
-            btn.innerText = "SAVE TO SHEET";
+            btn.innerText = "SAVE INVOICE";
             btn.disabled = false;
             dlBtn.disabled = false;
-            location.reload();
+            reloadFresh();
         }, 1200);
     }
 
     // ==========================================
     // PAST INVOICES (HISTORY)
-    // Reads invoices back from the sheet via Apps Script doGet,
+    // Reads saved invoices back from Firestore,
     // groups multi-item rows by invoice, and lets the user re-download
     // any invoice by repopulating the form and reusing the PDF generator.
     // ==========================================
@@ -2249,32 +2270,8 @@
         statusEl.innerText = 'Loading…';
         listEl.innerHTML = '';
         try {
-            const secret = await window.getSheetSecret();
-            // No secret means the app could not read config/sheet -> secret from
-            // Firestore: the document/field is missing, or the security rules block
-            // the read. Past Invoices AND customer auto-fill both depend on it, so
-            // say exactly that instead of a vague "could not load".
-            if (!secret) {
-                statusEl.innerText = '⚠️ Could not read the sheet key from the database (Firestore config/sheet → secret). Past Invoices and customer auto-fill both need it. Fix: make sure that document exists with a field named "secret", and that the Firestore rules let a logged-in user read it.';
-                return;
-            }
-            const url = SCRIPT_URL + '?action=list&secret=' + encodeURIComponent(secret);
-            const res = await fetch(url, { method: 'GET' });
-            const text = await res.text();
-            let data;
-            try { data = JSON.parse(text); }
-            catch (pe) {
-                throw new Error('the Apps Script did not return data (HTTP ' + res.status + '). It replied: ' + text.slice(0, 120));
-            }
-            if (data.status === 'error' && /unauth/i.test(data.message || '')) {
-                statusEl.innerText = '⚠️ The Google Apps Script rejected the request as Unauthorized. The sheet key stored in the database (config/sheet → secret) does not match the SHARED_SECRET in your Apps Script — make the two values identical.';
-                return;
-            }
-            if (data.status !== 'success' || !Array.isArray(data.invoices)) {
-                throw new Error(data.message || 'unexpected response');
-            }
             // Newest first
-            historyData = data.invoices.reverse();
+            historyData = (await window.MindoriDB.listInvoices()).reverse();
             filterHistory();
             statusEl.innerText = historyData.length + ' invoice(s) found.';
         } catch (e) {
@@ -2401,7 +2398,7 @@
     function clearReprint() {
         // Reload the page for a clean, fresh invoice (resets number preview,
         // clears reprint mode, and restores all defaults).
-        location.reload();
+        reloadFresh();
     }
 
     // ==========================================
@@ -2425,22 +2422,13 @@
         statusEl.innerText = 'Loading…';
         listEl.innerHTML = '';
         try {
-            const secret = await window.getSheetSecret();
-            const url = SCRIPT_URL + '?action=listAdvance&secret=' + encodeURIComponent(secret);
-            const res = await fetch(url, { method: 'GET' });
-            const data = await res.json();
-            if (data.status !== 'success' || !Array.isArray(data.invoices)) {
-                throw new Error(data.message || 'Unexpected response');
-            }
-            // Only show Pending advances (newest first)
-            advanceData = data.invoices.filter(inv =>
-                (inv.status || '').toString().trim().toLowerCase() !== 'completed'
-            ).reverse();
+            // Pending advances only, newest first
+            advanceData = (await window.MindoriDB.listAdvances()).reverse();
             renderAdvances(advanceData);
             statusEl.innerText = advanceData.length + ' pending advance(s).';
         } catch (e) {
             console.error('Advance fetch error:', e);
-            statusEl.innerText = 'Could not load advances. Check your connection and that the Apps Script is updated.';
+            statusEl.innerText = 'Could not load advances — ' + (e && e.message ? e.message : String(e));
         }
     }
     function renderAdvances(list) {
@@ -2508,13 +2496,13 @@
         const banner = document.getElementById('advance-banner');
         banner.style.display = 'flex';
         document.getElementById('advance-banner-text').innerHTML =
-            '✅ <strong>Finalizing ' + finalizingAdvanceId + '</strong> — adjust the final items/price, then tap Complete & Finalize. This moves it to the main Invoices sheet.';
+            '✅ <strong>Finalizing ' + finalizingAdvanceId + '</strong> — adjust the final items/price, then tap Complete & Finalize.';
         document.getElementById('capture-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function exitAdvanceMode() {
         // Reload for a clean slate (clears mode, banners, form)
-        location.reload();
+        reloadFresh();
     }
 
     // Show/hide the right action buttons for the current mode
@@ -2549,7 +2537,7 @@
         }
     }
 
-    // Save a new advance invoice to the Advance Invoices sheet (reserves the number)
+    // Save a new advance invoice (reserves the number)
     async function saveAdvanceInvoice() {
         const btn = document.getElementById('save-advance-button');
         const hasItem = invoiceItems.some(it => it.name && it.name.trim() !== "");
@@ -2573,11 +2561,7 @@
         calculate();
         btn.innerText = "SAVING…";
         try {
-            const secret = await window.getSheetSecret();
-            const payload = buildInvoicePayload(secret);
-            payload.action = 'saveAdvance';
-            payload.status = 'Pending';
-            await postPayload(payload);
+            await window.MindoriDB.saveAdvance(buildInvoicePayload());
         } catch (e) {
             console.error("Save advance failed:", e);
             alert("Could not save the advance invoice. Check your connection.");
@@ -2586,28 +2570,22 @@
         }
         btn.innerText = "✓ ADVANCE SAVED";
         showToast('✓ Advance invoice ' + formattedInvoiceID + ' saved');
-        setTimeout(() => { location.reload(); }, 1300);
+        setTimeout(() => { reloadFresh(); }, 1300);
     }
 
-    // Finalize an advance: write the finished invoice to the main Invoices sheet
-    // and mark the advance row Completed.
+    // Finalize an advance: save the finished invoice and mark it completed.
     async function finalizeAdvanceInvoice() {
         const btn = document.getElementById('finalize-button');
         const hasItem = invoiceItems.some(it => it.name && it.name.trim() !== "");
         if (!hasItem) { alert("Please ensure there is at least one item before finalizing."); return; }
-        if (!confirm('Complete & finalize ' + finalizingAdvanceId + '?\n\nThis writes the final invoice to the main Invoices sheet and marks the advance as Completed.')) {
+        if (!confirm('Complete & finalize ' + finalizingAdvanceId + '?\n\nThis saves the final invoice and marks the advance as completed.')) {
             return;
         }
         btn.disabled = true;
         btn.innerText = "FINALIZING…";
         calculate();
         try {
-            const secret = await window.getSheetSecret();
-            // 1) Write the finished invoice to the main Invoices sheet (reuse reserved number)
-            const payload = buildInvoicePayload(secret);
-            payload.action = 'finalizeAdvance';
-            payload.advanceInvoiceID = finalizingAdvanceId; // tells script which advance row to mark Completed
-            await postPayload(payload);
+            await window.MindoriDB.finalizeAdvance(buildInvoicePayload(), finalizingAdvanceId);
         } catch (e) {
             console.error("Finalize failed:", e);
             alert("Could not finalize. Check your connection and try again.");
@@ -2615,8 +2593,8 @@
             return;
         }
         btn.innerText = "✓ FINALIZED";
-        showToast('✓ ' + finalizingAdvanceId + ' completed & moved to Invoices');
-        setTimeout(() => { location.reload(); }, 1400);
+        showToast('✓ ' + finalizingAdvanceId + ' completed');
+        setTimeout(() => { reloadFresh(); }, 1400);
     }
 
     async function generatePDF() {
@@ -2633,8 +2611,11 @@
         // In advance modes (create/finalize), the number is handled by the advance
         // flow (Save Advance / Complete & Finalize), so Download must NOT claim a
         // new number or write to the main Invoices sheet — it only produces a PDF.
-        const skipClaimAndSave = reprintMode || appMode === 'advanceCreate' || appMode === 'advanceFinalize';
-        if (!skipClaimAndSave) {
+        const skipClaim = reprintMode || appMode === 'advanceCreate' || appMode === 'advanceFinalize';
+        // Reprint/edit still saves (updating the same invoice in place); the advance
+        // flows save themselves, so Download only produces the PDF there.
+        const skipSave = appMode === 'advanceCreate' || appMode === 'advanceFinalize';
+        if (!skipClaim) {
             try {
                 if (typeof window.claimNextInvoiceNumber !== 'function') {
                     throw new Error("Counter service not ready. Please refresh and try again.");
@@ -2660,21 +2641,21 @@
         calculate();
         btn.innerText = "SAVING & PREPARING PDF...";
 
-        // If the sheet write fails we still produce the PDF — the customer is
+        // If the save fails we still produce the PDF — the customer is
         // waiting for it — but we warn, and skip the usual auto-reload at the end
         // so the invoice stays on screen and can be re-saved.
         let sheetSaveFailed = false;
-        if (!skipClaimAndSave) {
+        if (!skipSave) {
             try {
-                await saveToSheet();
+                await persistInvoice();
             } catch (e) {
                 sheetSaveFailed = true;
                 console.error("Save Error:", e);
-                alert("The PDF will still download, but saving to the sheet failed:\n\n" + e.message +
+                alert("The PDF will still download, but saving the invoice failed:\n\n" + e.message +
                       (e.queued
                         ? "\n\nInvoice " + formattedInvoiceID + " has been queued and will send itself " +
                           "automatically once the connection is back."
-                        : "\n\nInvoice " + formattedInvoiceID + " will stay on screen — tap SAVE TO SHEET to retry."));
+                        : "\n\nInvoice " + formattedInvoiceID + " will stay on screen — tap SAVE INVOICE to retry."));
             }
         }
 
@@ -2937,7 +2918,7 @@
                 // (create/finalize) modes, keep the form and mode intact so the
                 // user can continue (e.g. tap Save Advance / Complete & Finalize).
                 if (!reprintMode && appMode === 'normal' && !sheetSaveFailed) {
-                    location.reload();
+                    reloadFresh();
                 }
             }, 1200);
         } catch (e) {
@@ -2959,8 +2940,8 @@
   // Import Firebase Authentication including signOut
   import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
-  // Import Firestore for centralized invoice numbering & secret config
-  import { getFirestore, doc, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+  // Import Firestore — invoices, products, roles and the invoice counter
+  import { getFirestore, doc, getDoc, setDoc, collection, getDocs, runTransaction } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBkTazE-MvTXkMh79lwLiOaW2NeY8MpxyA",
@@ -2977,6 +2958,113 @@
   const analytics = getAnalytics(app);
   const auth = getAuth(app);
   const db = getFirestore(app);
+
+  // ==========================================
+  // DATA — Firestore (replaces the Google Sheet + Apps Script)
+  // ==========================================
+  // Preview sites (mindori-invoices--pr12-xxxx.web.app) keep their own copies of
+  // the data, so trying things there never touches the live invoices or the
+  // live invoice number. Roles (users/) are shared — a person is who they are.
+  const IS_PREVIEW = location.hostname.includes('--');
+  const NS = IS_PREVIEW ? 'preview_' : '';
+  const col = (name) => collection(db, NS + name);
+  const COUNTER_REF = doc(db, 'counters', NS + 'invoices');
+
+  const num_ = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+  const str_ = (v) => (v === null || v === undefined) ? '' : String(v).trim();
+  // "MIN-0000144" / "MIN-144" -> 144, for sorting
+  const numberOf_ = (id) => { const m = str_(id).match(/(\d+)\s*$/); return m ? parseInt(m[1], 10) : 0; };
+  // "14/09/2026" -> "2026-09-14" (sortable; what the dashboard charts on)
+  const isoOf_ = (ddmmyyyy) => { const m = str_(ddmmyyyy).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m ? (m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0')) : ''; };
+  const productKey_ = (name) => encodeURIComponent(str_(name).toLowerCase().replace(/\s+/g, ' '));
+
+  function normalizeInvoice_(p, status) {
+    const id = str_(p.invoiceID);
+    return {
+      invoiceID: id, number: numberOf_(id),
+      createdBy: str_(p.createdBy), date: str_(p.date), dateISO: isoOf_(p.date),
+      customerName: str_(p.customerName), phone: str_(p.phone), birthDate: str_(p.birthDate),
+      source: str_(p.source), instagramID: str_(p.instagramID), paymentMode: str_(p.paymentMode), city: str_(p.city),
+      items: (p.items || []).filter(it => str_(it.name)).map(it => ({ name: str_(it.name), price: num_(it.price), qty: num_(it.qty) || 1, discount: num_(it.discount) })),
+      flatDiscount: num_(p.flatDiscount), grandTotal: num_(p.grandTotal),
+      advancePaid: num_(p.advancePaid), balanceDue: num_(p.balanceDue),
+      status: status
+    };
+  }
+
+  // Short-lived cache so login (products + customers) and opening Past Invoices
+  // don't each re-read the whole collection. Any save clears it.
+  let listCache_ = { at: 0, data: null };
+  async function listAll_() {
+    if (listCache_.data && (Date.now() - listCache_.at) < 15000) return listCache_.data;
+    const snap = await getDocs(col('invoices'));
+    const data = snap.docs.map(d => d.data()).sort((a, b) => (a.number || 0) - (b.number || 0));
+    listCache_ = { at: Date.now(), data };
+    return data;
+  }
+
+  const DB = {
+    isPreview: IS_PREVIEW,
+
+    // One document per invoice number. Saving the same number again (editing a
+    // past invoice) updates it in place — never a duplicate.
+    async saveInvoice(payload, status) {
+      const data = normalizeInvoice_(payload, status || 'completed');
+      if (!data.invoiceID) throw new Error('Missing invoice number');
+      const ref = doc(col('invoices'), data.invoiceID);
+      const existing = await getDoc(ref);
+      data.updatedAt = Date.now();
+      if (!existing.exists()) data.createdAt = Date.now();
+      await setDoc(ref, data, { merge: true });
+      listCache_ = { at: 0, data: null };
+      return { alreadySaved: existing.exists() };
+    },
+    async getInvoice(id) {
+      const snap = await getDoc(doc(col('invoices'), str_(id)));
+      return snap.exists() ? snap.data() : null;
+    },
+    // Completed invoices, oldest first (callers reverse for newest-first).
+    async listInvoices() { return (await listAll_()).filter(i => i.status !== 'pending'); },
+    // Advance invoices still awaiting completion.
+    async listAdvances() { return (await listAll_()).filter(i => i.status === 'pending'); },
+    async saveAdvance(payload) { return DB.saveInvoice(payload, 'pending'); },
+    // Completing an advance updates that same invoice: final items, status completed.
+    async finalizeAdvance(payload, advanceInvoiceID) {
+      if (advanceInvoiceID) payload.invoiceID = advanceInvoiceID;
+      return DB.saveInvoice(payload, 'completed');
+    },
+
+    async listProducts() {
+      const snap = await getDocs(col('products'));
+      return snap.docs.map(d => d.data())
+        .map(p => ({ name: str_(p.name), price: num_(p.price), category: str_(p.category) }))
+        .filter(p => p.name)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
+    async addProduct(product) {
+      const name = str_(product.name);
+      if (!name) throw new Error('Product needs a name');
+      const ref = doc(col('products'), productKey_(name));
+      const existing = await getDoc(ref);
+      if (existing.exists()) {
+        const err = new Error('"' + name + '" is already in the stock list.');
+        err.data = { duplicate: true };
+        throw err;
+      }
+      await setDoc(ref, { name: name, price: num_(product.price), category: str_(product.category), createdAt: Date.now() });
+    },
+
+    // 'admin' or 'staff', from users/<login email>. No entry = staff.
+    async getRole() {
+      const email = ((auth.currentUser && auth.currentUser.email) || '').toLowerCase();
+      if (!email) return 'staff';
+      try {
+        const snap = await getDoc(doc(db, 'users', email));
+        return (snap.exists() && snap.data().role === 'admin') ? 'admin' : 'staff';
+      } catch (e) { console.error('Role lookup failed:', e); return 'staff'; }
+    }
+  };
+  window.MindoriDB = DB;
 
   // ==========================================
   // SESSION EXPIRY CONFIG — 24 hours
@@ -3019,14 +3107,14 @@
 
   // Read the current counter (for preview display only)
   window.peekNextInvoiceNumber = async () => {
-    const snap = await getDoc(doc(db, 'counters', 'invoices'));
+    const snap = await getDoc(COUNTER_REF);
     const current = snap.exists() ? snap.data().lastNumber : 0;
     return current + 1;
   };
 
   // Atomically claim the next number — call ONLY when finalizing the PDF
   window.claimNextInvoiceNumber = async () => {
-    const counterRef = doc(db, 'counters', 'invoices');
+    const counterRef = COUNTER_REF;
     return await runTransaction(db, async (tx) => {
       const snap = await tx.get(counterRef);
       const current = snap.exists() ? snap.data().lastNumber : 0;
@@ -3034,26 +3122,6 @@
       tx.set(counterRef, { lastNumber: next });
       return next;
     });
-  };
-
-  // ==========================================
-  // SHEET SHARED SECRET — Apps Script lockdown
-  // ==========================================
-  // Cache the secret in memory after first read so we don't hit Firestore every save
-  let cachedSheetSecret = null;
-  window.getSheetSecret = async () => {
-    if (cachedSheetSecret) return cachedSheetSecret;
-    try {
-      const snap = await getDoc(doc(db, 'config', 'sheet'));
-      if (snap.exists() && snap.data().secret) {
-        cachedSheetSecret = snap.data().secret;
-        return cachedSheetSecret;
-      }
-      return null;
-    } catch (e) {
-      console.error("Could not read sheet secret:", e);
-      return null;
-    }
   };
 
   // Periodic check — every 60 seconds, verify session is still valid
@@ -3088,6 +3156,15 @@
       }
       // Valid session
       sessionWasActive = true;
+      // Admins land on the dashboard; the invoice page is one tap away from there
+      // (?invoice=1 / ?reprint=… keep an admin on this page, across reloads too).
+      const role = await window.MindoriDB.getRole();
+      window.mindoriRole = role;
+      const params = new URLSearchParams(location.search);
+      if (role === 'admin' && !params.has('invoice') && !params.has('reprint')) {
+        location.replace('/dashboard');
+        return;
+      }
       overlay.style.display = 'none';
       document.getElementById('auth-pass').value = '';
       // Capture the logged-in username (part before @mindori.in) for display + Sheet
@@ -3096,8 +3173,15 @@
       const userSpan = document.getElementById('loggedInUser');
       if (userSpan) userSpan.innerText = emailName ? ('👤 ' + emailName) : '';
       startSessionWatcher();
-      // Pre-fetch the sheet secret so it's ready when needed
-      window.getSheetSecret();
+      const dashLink = document.getElementById('dash-link');
+      if (dashLink) dashLink.style.display = (role === 'admin') ? '' : 'none';
+      // Deep link from the dashboard: open a saved invoice for reprint / editing.
+      const reprintId = params.get('reprint');
+      if (reprintId && typeof reprintInvoice === 'function') {
+        window.MindoriDB.getInvoice(reprintId)
+          .then(inv => { if (inv) reprintInvoice(inv); else showToast('Invoice ' + reprintId + ' not found'); })
+          .catch(e => console.error('Could not open invoice', reprintId, e));
+      }
       // Load the product catalog for autocomplete (non-fatal if it fails)
       if (typeof fetchProducts === 'function') { fetchProducts(); }
       // Load saved customers for the Bill To name autocomplete (non-fatal if it fails)
@@ -3179,4 +3263,4 @@
   };
 </script>
 </body>
-</html>
+</html>
