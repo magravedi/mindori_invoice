@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mindori Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ---------- Tokens: light first, dark under both scopes ---------- */
+  :root {
+    color-scheme: light;
+    --brand: #3D6D7C;            /* chrome: masthead, buttons, rules (same as the invoice page) */
+    --brand-ink: #2b5361;
+    --page: #f7f6f2;
+    --surface: #fcfcfb;
+    --surface-2: #f1f0eb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --ring: rgba(11,11,11,0.10);
+    --series: #0E8FA3;           /* validated data mark colour (light) */
+    --series-soft: rgba(14,143,163,0.12);
+    --good: #006300;
+    --good-bg: rgba(12,163,12,0.10);
+    --bad: #d03b3b;
+    --bad-bg: rgba(208,59,59,0.10);
+    --warn: #fab219;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(11,11,11,0.04), 0 8px 24px -12px rgba(11,11,11,0.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+      --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+      --ring: rgba(255,255,255,0.10);
+      --series: #26A6BA; --series-soft: rgba(38,166,186,0.16);
+      --good: #0ca30c; --bad: #e66767;
+      --brand-ink: #9cc3cf;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+    --ring: rgba(255,255,255,0.10);
+    --series: #26A6BA; --series-soft: rgba(38,166,186,0.16);
+    --good: #0ca30c; --bad: #e66767;
+    --brand-ink: #9cc3cf;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--page); color: var(--ink); }
+  body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.45; padding-inline: 16px; padding-block: 0 48px; }
+  a { color: inherit; }
+  button { font: inherit; }
+  [hidden] { display: none !important; }
+
+  /* ---------- Gate ---------- */
+  #gate { min-height: 70vh; display: grid; place-items: center; text-align: center; color: var(--ink-2); }
+  #gate .card { background: var(--surface); border: 1px solid var(--ring); border-radius: var(--radius); padding: 28px 32px; max-width: 420px; box-shadow: var(--shadow); }
+  #gate h2 { margin: 0 0 6px; color: var(--ink); font-size: 18px; }
+  .spinner { width: 22px; height: 22px; border: 2px solid var(--grid); border-top-color: var(--brand); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Masthead ---------- */
+  .mast { position: sticky; top: 0; z-index: 20; margin-inline: -16px; padding: 14px 16px 12px; background: var(--brand); color: #fff; }
+  .mast-inner { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 12px; margin-right: auto; }
+  .mark { width: 38px; height: 38px; border-radius: 10px; background: rgba(255,255,255,0.14); display: grid; place-items: center; font-weight: 800; font-size: 18px; letter-spacing: -0.02em; border: 1px solid rgba(255,255,255,0.18); }
+  .brand h1 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; }
+  .brand .sub { font-size: 12px; opacity: .85; display: flex; align-items: center; gap: 8px; }
+  .badge { font-size: 10px; font-weight: 700; letter-spacing: .08em; padding: 2px 7px; border-radius: 999px; background: var(--warn); color: #1a1a19; }
+  .periods { display: flex; gap: 4px; background: rgba(0,0,0,0.16); padding: 4px; border-radius: 10px; overflow-x: auto; max-width: 100%; }
+  .periods button { border: 0; background: transparent; color: rgba(255,255,255,0.82); padding: 7px 12px; border-radius: 7px; font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .periods button[aria-pressed="true"] { background: #fff; color: var(--brand-ink); }
+  .actions { display: flex; align-items: center; gap: 8px; }
+  .btn { border: 1px solid transparent; border-radius: 9px; padding: 8px 14px; font-weight: 600; font-size: 13px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; line-height: 1; }
+  .btn.primary { background: #fff; color: var(--brand-ink); }
+  .btn.ghost { background: transparent; color: #fff; border-color: rgba(255,255,255,0.35); }
+  .btn.brand { background: var(--brand); color: #fff; }
+  .btn.subtle { background: var(--surface-2); color: var(--ink); border-color: var(--ring); }
+  .btn.danger { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .who { font-size: 12px; opacity: .9; display: none; }
+  @media (min-width: 720px) { .who { display: inline; } }
+
+  /* ---------- Layout ---------- */
+  main { max-width: 1180px; margin: 0 auto; }
+  section { margin-top: 22px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--ring); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); min-width: 0; }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .card h3 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--ink-2); padding-left: 10px; border-left: 3px solid var(--brand); line-height: 1.2; }
+  .card .hint { font-size: 12px; color: var(--muted); }
+  .tog { border: 1px solid var(--ring); background: transparent; color: var(--ink-2); border-radius: 7px; padding: 4px 9px; font-size: 12px; cursor: pointer; }
+  .tog[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); }
+
+  /* ---------- Hero + stat tiles ---------- */
+  .hero { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr; gap: 16px; align-items: stretch; }
+  @media (max-width: 1100px) { .hero { grid-template-columns: 1fr 1fr 1fr; } .hero .big { grid-column: 1 / -1; } }
+  @media (max-width: 600px) { .hero { grid-template-columns: 1fr 1fr; } }
+  .tile { background: var(--surface); border: 1px solid var(--ring); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); min-width: 0; }
+  .tile .k { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+  .tile .v { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-top: 4px; line-height: 1.1; }
+  .tile.big { background: linear-gradient(160deg, var(--surface) 0%, var(--surface-2) 100%); }
+  .tile.big .v { font-size: 44px; font-weight: 800; letter-spacing: -0.03em; color: var(--brand-ink); }
+  .tile .d { margin-top: 8px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; font-weight: 600; }
+  .d.up { color: var(--good); background: var(--good-bg); }
+  .d.down { color: var(--bad); background: var(--bad-bg); }
+  .d.flat { color: var(--ink-2); background: var(--surface-2); }
+  .tile .s { margin-top: 6px; font-size: 12px; color: var(--muted); }
+
+  /* ---------- Charts ---------- */
+  .chart { position: relative; width: 100%; min-height: 220px; }
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart .tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--page); font-size: 12px; padding: 6px 9px; border-radius: 7px; white-space: nowrap; transform: translate(-50%, calc(-100% - 10px)); opacity: 0; transition: opacity .12s; z-index: 5; }
+  .chart .tip b { font-weight: 700; }
+  .grid-line { stroke: var(--grid); stroke-width: 1; }
+  .axis-line { stroke: var(--axis); stroke-width: 1; }
+  .tick { fill: var(--muted); font-size: 11px; }
+  .line-path { fill: none; stroke: var(--series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .area-path { fill: var(--series-soft); }
+  .dot { fill: var(--series); stroke: var(--surface); stroke-width: 2; }
+  .bar { fill: var(--series); }
+  .bar-hit { fill: transparent; }
+  .bar-label { fill: var(--ink-2); font-size: 12px; }
+  .bar-val { fill: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .bar-val.soft { fill: var(--ink-2); font-weight: 500; }
+  .empty { color: var(--muted); font-size: 13px; padding: 26px 0; text-align: center; }
+
+  /* ---------- Tables ---------- */
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 8px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  td { padding: 9px 8px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: 0; }
+  .pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px; }
+  .pill.pending { background: rgba(250,178,25,0.18); color: #7a5300; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pill.pending { color: #fab219; } }
+  :root[data-theme="dark"] .pill.pending { color: #fab219; }
+  .pill.done { background: var(--good-bg); color: var(--good); }
+  .link { color: var(--brand-ink); font-weight: 600; text-decoration: none; }
+  .link:hover { text-decoration: underline; }
+  .search { width: 100%; max-width: 360px; padding: 9px 12px; border: 1px solid var(--ring); border-radius: 9px; background: var(--surface-2); color: var(--ink); font: inherit; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input[type="email"], select { padding: 9px 12px; border: 1px solid var(--ring); border-radius: 9px; background: var(--surface-2); color: var(--ink); font: inherit; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+  .status { font-size: 13px; color: var(--ink-2); margin-top: 10px; min-height: 1.3em; white-space: pre-line; }
+  .list { display: flex; flex-direction: column; }
+  .li { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--grid); }
+  .li:last-child { border-bottom: 0; }
+  .li .t { font-weight: 600; }
+  .li .m { font-size: 12px; color: var(--muted); }
+  .li .r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  /* ---------- Motion (staged, once) ---------- */
+  .reveal { opacity: 0; transform: translateY(8px); animation: rise .5s ease forwards; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .reveal { animation: none; opacity: 1; transform: none; } .line-path { stroke-dasharray: none !important; } }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="card">
+    <div class="spinner" id="gate-spin"></div>
+    <h2 id="gate-title">Opening the dashboard…</h2>
+    <div id="gate-msg">Checking your login.</div>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header class="mast">
+    <div class="mast-inner">
+      <div class="brand">
+        <div class="mark">M</div>
+        <div>
+          <h1>Mindori</h1>
+          <span class="sub">Dashboard <span class="badge" id="preview-badge" hidden>PREVIEW</span></span>
+        </div>
+      </div>
+      <nav class="periods" id="periods" aria-label="Period"></nav>
+      <div class="actions">
+        <span class="who" id="who"></span>
+        <a class="btn primary" href="/?invoice=1">＋ New invoice</a>
+        <button class="btn ghost" id="logout-btn">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="hero"></section>
+
+    <section class="grid-2">
+      <div class="card reveal" style="animation-delay:.05s">
+        <div class="card-head"><h3>Sales</h3><div class="row"><span class="hint" id="trend-hint"></span><button class="tog" data-table="trend" aria-pressed="false">Table</button></div></div>
+        <div class="chart" id="trend"></div>
+      </div>
+      <div class="card reveal" style="animation-delay:.1s">
+        <div class="card-head"><h3>Top products</h3><div class="row"><button class="tog" id="prod-mode" aria-pressed="false">By quantity</button><button class="tog" data-table="products" aria-pressed="false">Table</button></div></div>
+        <div class="chart" id="products"></div>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <div class="card reveal" style="animation-delay:.15s">
+        <div class="card-head"><h3>Top customers</h3><button class="tog" data-table="customers" aria-pressed="false">Table</button></div>
+        <div class="chart" id="customers"></div>
+      </div>
+      <div class="card reveal" style="animation-delay:.2s">
+        <div class="card-head"><h3>Where sales come from</h3>
+          <div class="row" id="dim-tabs">
+            <button class="tog" data-dim="source" aria-pressed="true">Source</button>
+            <button class="tog" data-dim="paymentMode" aria-pressed="false">Payment</button>
+            <button class="tog" data-dim="city" aria-pressed="false">City</button>
+            <button class="tog" data-table="dims" aria-pressed="false">Table</button>
+          </div>
+        </div>
+        <div class="chart" id="dims"></div>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <div class="card reveal" style="animation-delay:.25s">
+        <div class="card-head"><h3>Upcoming birthdays</h3><span class="hint">next 14 days</span></div>
+        <div id="birthdays"></div>
+      </div>
+      <div class="card reveal" style="animation-delay:.3s">
+        <div class="card-head"><h3>Pending advances</h3><span class="hint" id="adv-hint"></span></div>
+        <div id="advances"></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="card reveal" style="animation-delay:.35s">
+        <div class="card-head"><h3>Recent invoices</h3><input class="search" id="inv-search" placeholder="Search invoice #, name, phone, city…"></div>
+        <div class="tbl-wrap" id="recent"></div>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <div class="card reveal" style="animation-delay:.4s">
+        <div class="card-head"><h3>Team &amp; access</h3><span class="hint">admins see this dashboard; everyone else sees the invoice page</span></div>
+        <div class="tbl-wrap" id="team"></div>
+        <div class="row" style="margin-top:12px">
+          <input type="email" id="team-email" placeholder="teammate@mindori.in" autocomplete="off">
+          <select id="team-role"><option value="staff">Staff</option><option value="admin">Admin</option></select>
+          <button class="btn brand" id="team-add">Add</button>
+        </div>
+        <div class="status" id="team-status"></div>
+      </div>
+      <div class="card reveal" style="animation-delay:.45s">
+        <div class="card-head"><h3>Data</h3></div>
+        <div class="row">
+          <button class="btn brand" id="import-btn">⬇ Import from Google Sheet</button>
+          <button class="btn subtle" id="export-btn">⬆ Export CSV</button>
+          <button class="btn subtle" id="refresh-btn">↻ Refresh</button>
+        </div>
+        <div class="status" id="data-status"></div>
+        <div class="note" id="data-note"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ============================================================
+     Analytics + rendering. Plain script (no Firebase) so it can be
+     exercised on its own; the module below feeds it data.
+     ============================================================ -->
+<script>
+(function () {
+  'use strict';
+
+  // ---------- helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const inr0 = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+  const fmtINR = (n) => '₹' + inr0.format(Math.round(n || 0));
+  const fmtNum = (n) => inr0.format(Math.round(n || 0));
+  const esc = (v) => String(v === null || v === undefined ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+  const str = (v) => (v === null || v === undefined) ? '' : String(v).trim();
+  const digits = (v) => str(v).replace(/\D/g, '');
+  const norm = (v) => str(v).toLowerCase().replace(/\s+/g, ' ');
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const isoOfDate = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  const isoOfDDMMYYYY = (s) => { const m = str(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m ? (m[3] + '-' + pad2(m[2]) + '-' + pad2(m[1])) : ''; };
+  const dateOfISO = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmtDay = (iso) => { const d = dateOfISO(iso); return d.getDate() + ' ' + MONTHS[d.getMonth()]; };
+  const fmtMonth = (ym) => { const [y, m] = ym.split('-').map(Number); return MONTHS[m - 1] + ' ' + String(y).slice(2); };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const customerKey = (inv) => digits(inv.phone) || norm(inv.customerName);
+
+  // ---------- state ----------
+  const S = { invoices: [], products: [], users: [], me: '', period: '30d', prodMode: 'revenue', dim: 'source', tables: {}, search: '', ctx: { isPreview: false } };
+  const PERIODS = [
+    { id: 'today', label: 'Today' }, { id: '7d', label: '7 days' }, { id: '30d', label: '30 days' },
+    { id: 'mtd', label: 'This month' }, { id: 'ytd', label: 'This year' }, { id: 'all', label: 'All time' }
+  ];
+
+  function normalizeInvoice(raw) {
+    const inv = Object.assign({}, raw);
+    inv.invoiceID = str(inv.invoiceID);
+    inv.dateISO = str(inv.dateISO) || isoOfDDMMYYYY(inv.date);
+    inv.grandTotal = num(inv.grandTotal);
+    inv.flatDiscount = num(inv.flatDiscount);
+    inv.advancePaid = num(inv.advancePaid);
+    inv.balanceDue = num(inv.balanceDue);
+    inv.status = str(inv.status) || 'completed';
+    inv.items = (inv.items || []).map(it => ({ name: str(it.name), price: num(it.price), qty: num(it.qty) || 1, discount: num(it.discount) }));
+    inv.number = num(inv.number) || (function () { const m = inv.invoiceID.match(/(\d+)\s*$/); return m ? parseInt(m[1], 10) : 0; })();
+    return inv;
+  }
+
+  // ---------- periods ----------
+  function rangeFor(id) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const tomorrow = addDays(today, 1);
+    let start, end = tomorrow, prevStart, prevEnd, gran = 'day';
+    if (id === 'today') { start = today; prevStart = addDays(today, -1); prevEnd = today; }
+    else if (id === '7d') { start = addDays(today, -6); prevStart = addDays(start, -7); prevEnd = start; }
+    else if (id === '30d') { start = addDays(today, -29); prevStart = addDays(start, -30); prevEnd = start; }
+    else if (id === 'mtd') { start = new Date(today.getFullYear(), today.getMonth(), 1); prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1); prevEnd = start; }
+    else if (id === 'ytd') { start = new Date(today.getFullYear(), 0, 1); prevStart = new Date(today.getFullYear() - 1, 0, 1); prevEnd = start; gran = 'month'; }
+    else { start = null; prevStart = null; prevEnd = null; gran = 'month'; }
+    return {
+      id, gran,
+      startISO: start ? isoOfDate(start) : '', endISO: isoOfDate(end),
+      prevStartISO: prevStart ? isoOfDate(prevStart) : '', prevEndISO: prevEnd ? isoOfDate(prevEnd) : '',
+      start, end
+    };
+  }
+  const inRange = (inv, a, b) => inv.dateISO && (!a || inv.dateISO >= a) && inv.dateISO < b;
+
+  // ---------- analytics ----------
+  function completed() { return S.invoices.filter(i => i.status !== 'pending'); }
+  function kpis(r) {
+    const cur = completed().filter(i => inRange(i, r.startISO, r.endISO));
+    const prev = r.prevStartISO ? completed().filter(i => inRange(i, r.prevStartISO, r.prevEndISO)) : null;
+    const sum = (arr) => arr.reduce((s, i) => s + i.grandTotal, 0);
+    const custs = (arr) => new Set(arr.map(customerKey).filter(Boolean)).size;
+    const pending = S.invoices.filter(i => i.status === 'pending');
+    return {
+      revenue: sum(cur), revenuePrev: prev ? sum(prev) : null,
+      count: cur.length, countPrev: prev ? prev.length : null,
+      customers: custs(cur), customersPrev: prev ? custs(prev) : null,
+      avg: cur.length ? sum(cur) / cur.length : 0, avgPrev: prev && prev.length ? sum(prev) / prev.length : null,
+      pendingCount: pending.length, pendingBalance: pending.reduce((s, i) => s + i.balanceDue, 0)
+    };
+  }
+  function trend(r) {
+    const inv = completed();
+    let gran = r.gran, startISO = r.startISO, endISO = r.endISO;
+    if (r.id === 'today') { startISO = isoOfDate(addDays(r.start, -6)); }           // a little context around today
+    if (r.id === 'all') { const first = inv.map(i => i.dateISO).filter(Boolean).sort()[0]; startISO = first ? first.slice(0, 7) + '-01' : isoOfDate(new Date()); }
+    const buckets = new Map();
+    if (gran === 'day') {
+      for (let d = dateOfISO(startISO); isoOfDate(d) < endISO; d = addDays(d, 1)) buckets.set(isoOfDate(d), 0);
+      inv.forEach(i => { if (buckets.has(i.dateISO)) buckets.set(i.dateISO, buckets.get(i.dateISO) + i.grandTotal); });
+      return Array.from(buckets, ([k, v]) => ({ key: k, label: fmtDay(k), value: v }));
+    }
+    const s = dateOfISO(startISO), e = dateOfISO(endISO);
+    for (let d = new Date(s.getFullYear(), s.getMonth(), 1); d < e; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) buckets.set(isoOfDate(d).slice(0, 7), 0);
+    inv.forEach(i => { const k = i.dateISO.slice(0, 7); if (buckets.has(k) && i.dateISO >= startISO && i.dateISO < endISO) buckets.set(k, buckets.get(k) + i.grandTotal); });
+    return Array.from(buckets, ([k, v]) => ({ key: k, label: fmtMonth(k), value: v }));
+  }
+  function topProducts(r, mode) {
+    const agg = new Map();
+    completed().filter(i => inRange(i, r.startISO, r.endISO)).forEach(i => i.items.forEach(it => {
+      const k = norm(it.name); if (!k) return;
+      const a = agg.get(k) || { label: it.name, revenue: 0, qty: 0 };
+      a.revenue += it.price * it.qty * (1 - it.discount / 100); a.qty += it.qty; agg.set(k, a);
+    }));
+    return Array.from(agg.values()).sort((a, b) => (mode === 'qty' ? b.qty - a.qty : b.revenue - a.revenue)).slice(0, 8)
+      .map(a => ({ label: a.label, value: mode === 'qty' ? a.qty : a.revenue, sub: mode === 'qty' ? fmtINR(a.revenue) : fmtNum(a.qty) + ' sold' }));
+  }
+  function topCustomers(r) {
+    const agg = new Map();
+    completed().filter(i => inRange(i, r.startISO, r.endISO)).forEach(i => {
+      const k = customerKey(i); if (!k) return;
+      const a = agg.get(k) || { label: i.customerName || i.phone, spend: 0, visits: 0, last: '' , phone: i.phone };
+      a.spend += i.grandTotal; a.visits += 1; if (i.dateISO > a.last) { a.last = i.dateISO; a.label = i.customerName || a.label; } agg.set(k, a);
+    });
+    return Array.from(agg.values()).sort((a, b) => b.spend - a.spend).slice(0, 8)
+      .map(a => ({ label: a.label, value: a.spend, sub: a.visits + (a.visits === 1 ? ' visit' : ' visits') + (a.phone ? ' · ' + a.phone : '') }));
+  }
+  function byDim(r, dim) {
+    const agg = new Map();
+    completed().filter(i => inRange(i, r.startISO, r.endISO)).forEach(i => {
+      const k = str(i[dim]) || '—';
+      const a = agg.get(k) || { label: k, value: 0, count: 0 }; a.value += i.grandTotal; a.count += 1; agg.set(k, a);
+    });
+    const rows = Array.from(agg.values()).sort((a, b) => b.value - a.value);
+    const top = rows.slice(0, 6); const rest = rows.slice(6);
+    if (rest.length) top.push({ label: 'Other (' + rest.length + ')', value: rest.reduce((s, x) => s + x.value, 0), count: rest.reduce((s, x) => s + x.count, 0) });
+    return top.map(a => ({ label: a.label, value: a.value, sub: a.count + (a.count === 1 ? ' invoice' : ' invoices') }));
+  }
+  function upcomingBirthdays() {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const people = new Map();
+    completed().forEach(i => {
+      const k = customerKey(i); if (!k) return;
+      const p = people.get(k) || { name: i.customerName, phone: i.phone, birth: '', spend: 0, last: '', lastItem: '' };
+      p.spend += i.grandTotal;
+      if (i.birthDate) p.birth = i.birthDate;
+      if (i.dateISO >= p.last) { p.last = i.dateISO; p.name = i.customerName || p.name; p.lastItem = (i.items[0] && i.items[0].name) || p.lastItem; }
+      people.set(k, p);
+    });
+    const out = [];
+    people.forEach(p => {
+      const m = str(p.birth).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if (!m) return;
+      const day = +m[1], mon = +m[2];
+      let next = new Date(today.getFullYear(), mon - 1, day); if (next < today) next = new Date(today.getFullYear() + 1, mon - 1, day);
+      const days = Math.round((next - today) / 86400000);
+      if (days <= 14) out.push({ name: p.name, phone: p.phone, when: day + ' ' + MONTHS[mon - 1], days, spend: p.spend, lastItem: p.lastItem });
+    });
+    return out.sort((a, b) => a.days - b.days);
+  }
+
+  // ---------- charts (inline SVG) ----------
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text !== undefined) e.textContent = text; return e; };
+  const niceMax = (v) => { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); const f = v / p; const n = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10; return n * p; };
+  const shortINR = (v) => v >= 1e7 ? (v / 1e7).toFixed(1).replace(/\.0$/, '') + 'Cr' : v >= 1e5 ? (v / 1e5).toFixed(1).replace(/\.0$/, '') + 'L' : v >= 1e3 ? (v / 1e3).toFixed(1).replace(/\.0$/, '') + 'k' : String(Math.round(v));
+
+  function tipFor(container) {
+    let t = container.querySelector('.tip');
+    if (!t) { t = document.createElement('div'); t.className = 'tip'; container.appendChild(t); }
+    return t;
+  }
+
+  // Discrete daily / monthly totals as columns: honest for a shop that doesn't
+  // sell every day (a line would zig-zag through the zero days). Only the data
+  // end of each column is rounded; the base sits square on the axis.
+  function topRoundedBar(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h);
+    if (h <= 0.5) return '';
+    if (r <= 0.5) return 'M' + x + ' ' + (y + h) + ' V' + y + ' H' + (x + w) + ' V' + (y + h) + ' Z';
+    return 'M' + x + ' ' + (y + h) + ' V' + (y + r) + ' Q' + x + ' ' + y + ' ' + (x + r) + ' ' + y + ' H' + (x + w - r) + ' Q' + (x + w) + ' ' + y + ' ' + (x + w) + ' ' + (y + r) + ' V' + (y + h) + ' Z';
+  }
+  function columnChart(container, pts) {
+    container.innerHTML = '';
+    if (!pts.length) { container.innerHTML = '<div class="empty">No sales in this period.</div>'; return; }
+    const W = Math.max(320, container.clientWidth || 560), H = 230, P = { t: 14, r: 12, b: 28, l: 44 };
+    const svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, role: 'img', 'aria-label': 'Sales over time' });
+    const maxV = niceMax(Math.max.apply(null, pts.map(p => p.value)));
+    const plotW = W - P.l - P.r, plotH = H - P.t - P.b;
+    const slot = plotW / pts.length, gap = Math.min(8, Math.max(2, slot * 0.28)), bw = Math.max(2, slot - gap);
+    const x = (i) => P.l + i * slot + gap / 2;
+    const y = (v) => P.t + (1 - v / maxV) * plotH;
+    for (let g = 0; g <= 4; g++) { const v = maxV * g / 4, yy = y(v); svg.appendChild(el('line', { x1: P.l, x2: W - P.r, y1: yy, y2: yy, class: g === 0 ? 'axis-line' : 'grid-line' })); svg.appendChild(el('text', { x: P.l - 6, y: yy + 4, 'text-anchor': 'end', class: 'tick' }, '₹' + shortINR(v))); }
+    const every = Math.max(1, Math.ceil(pts.length / (W < 480 ? 4 : 7)));
+    pts.forEach((p, i) => { if (i % every === 0 || i === pts.length - 1) svg.appendChild(el('text', { x: x(i) + bw / 2, y: H - 8, 'text-anchor': 'middle', class: 'tick' }, p.label)); });
+    const tip = tipFor(container);
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    pts.forEach((p, i) => {
+      const h = Math.max(0, y(0) - y(p.value));
+      const bar = el('path', { d: topRoundedBar(x(i), y(p.value), bw, h, 4), class: 'bar', style: 'transform-box: fill-box; transform-origin: 50% 100%;' });
+      svg.appendChild(bar);
+      const hit = el('rect', { x: x(i) - gap / 2, y: P.t, width: slot, height: plotH, class: 'bar-hit' }); svg.appendChild(hit);
+      const show = () => { tip.innerHTML = esc(p.label) + '<br><b>' + fmtINR(p.value) + '</b>'; const rr = svg.getBoundingClientRect(); tip.style.left = (((x(i) + bw / 2) / W) * rr.width) + 'px'; tip.style.top = ((y(p.value) / H) * rr.height) + 'px'; tip.style.opacity = 1; bar.style.opacity = .75; };
+      const hide = () => { tip.style.opacity = 0; bar.style.opacity = 1; };
+      hit.addEventListener('mouseenter', show); hit.addEventListener('mouseleave', hide); hit.addEventListener('touchstart', show, { passive: true });
+      if (!reduce && h > 0) { bar.style.transform = 'scaleY(0)'; requestAnimationFrame(() => { bar.style.transition = 'transform .45s ease ' + Math.min(i * 10, 280) + 'ms'; bar.style.transform = 'scaleY(1)'; }); }
+    });
+    container.appendChild(svg);
+  }
+
+  function barList(container, rows, opts) {
+    container.innerHTML = '';
+    if (!rows.length) { container.innerHTML = '<div class="empty">' + esc(opts.empty || 'Nothing in this period.') + '</div>'; return; }
+    const W = Math.max(320, container.clientWidth || 520), rowH = 30, labelW = Math.min(160, Math.round(W * 0.34)), valW = 78, H = rows.length * rowH + 6;
+    const svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, role: 'img', 'aria-label': opts.aria || 'Ranked bars' });
+    const maxV = Math.max.apply(null, rows.map(r => r.value)) || 1;
+    const x0 = labelW + 10, x1 = W - valW;
+    const tip = tipFor(container);
+    rows.forEach((r, i) => {
+      const yy = i * rowH + 4, h = 14;
+      const w = Math.max(3, (r.value / maxV) * (x1 - x0));
+      const lbl = r.label.length > 22 ? r.label.slice(0, 21) + '…' : r.label;
+      svg.appendChild(el('text', { x: labelW, y: yy + 12, 'text-anchor': 'end', class: 'bar-label' }, lbl));
+      const rect = el('rect', { x: x0, y: yy + 2, width: w, height: h, rx: 4, class: 'bar' }); svg.appendChild(rect);
+      svg.appendChild(el('text', { x: x1 + 8, y: yy + 12, class: 'bar-val' + (i ? ' soft' : '') }, opts.fmt(r.value)));
+      const hit = el('rect', { x: 0, y: yy, width: W, height: rowH, class: 'bar-hit' }); svg.appendChild(hit);
+      hit.addEventListener('mouseenter', () => { tip.innerHTML = '<b>' + esc(r.label) + '</b><br>' + esc(opts.fmt(r.value)) + (r.sub ? ' · ' + esc(r.sub) : ''); const rr = svg.getBoundingClientRect(); tip.style.left = (((x0 + w / 2) / W) * rr.width) + 'px'; tip.style.top = ((yy / H) * rr.height) + 'px'; tip.style.opacity = 1; });
+      hit.addEventListener('mouseleave', () => { tip.style.opacity = 0; });
+    });
+    container.appendChild(svg);
+  }
+
+  function tableOf(container, rows, cols) {
+    container.innerHTML = '<div class="tbl-wrap"><table><thead><tr>' + cols.map(c => '<th' + (c.num ? ' class="num"' : '') + '>' + esc(c.h) + '</th>').join('') + '</tr></thead><tbody>' +
+      (rows.length ? rows.map(r => '<tr>' + cols.map(c => '<td' + (c.num ? ' class="num"' : '') + '>' + esc(c.f(r)) + '</td>').join('') + '</tr>').join('') : '<tr><td colspan="' + cols.length + '" class="empty">Nothing in this period.</td></tr>') +
+      '</tbody></table></div>';
+  }
+
+  // ---------- render ----------
+  function delta(cur, prev) {
+    if (prev === null || prev === undefined) return '<span class="d flat">—</span>';
+    if (!prev && !cur) return '<span class="d flat">no change</span>';
+    if (!prev) return '<span class="d up">▲ new</span>';
+    const pct = Math.round(((cur - prev) / prev) * 100);
+    if (pct === 0) return '<span class="d flat">= same as before</span>';
+    return pct > 0 ? '<span class="d up">▲ ' + pct + '% vs previous</span>' : '<span class="d down">▼ ' + Math.abs(pct) + '% vs previous</span>';
+  }
+  function countUp(node, to, fmt) {
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || to < 10) { node.textContent = fmt(to); return; }
+    node.textContent = fmt(0);
+    const t0 = performance.now(), dur = 650;
+    const step = (t) => { const k = Math.min(1, (t - t0) / dur); const e = 1 - Math.pow(1 - k, 3); node.textContent = fmt(to * e); if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+
+  function renderPeriods() {
+    $('periods').innerHTML = PERIODS.map(p => '<button data-p="' + p.id + '" aria-pressed="' + (p.id === S.period) + '">' + p.label + '</button>').join('');
+  }
+  function renderHero(r) {
+    const k = kpis(r);
+    const pl = PERIODS.find(p => p.id === r.id).label.toLowerCase();
+    $('hero').innerHTML =
+      '<div class="tile big reveal"><div class="k">Sales · ' + esc(pl) + '</div><div class="v" id="kv-rev"></div>' + delta(k.revenue, k.revenuePrev) + '</div>' +
+      '<div class="tile reveal" style="animation-delay:.05s"><div class="k">Invoices</div><div class="v" id="kv-cnt"></div>' + delta(k.count, k.countPrev) + '</div>' +
+      '<div class="tile reveal" style="animation-delay:.1s"><div class="k">Customers</div><div class="v" id="kv-cus"></div>' + delta(k.customers, k.customersPrev) + '</div>' +
+      '<div class="tile reveal" style="animation-delay:.15s"><div class="k">Avg. invoice</div><div class="v" id="kv-avg"></div>' + delta(k.avg, k.avgPrev) + '</div>' +
+      '<div class="tile reveal" style="animation-delay:.2s"><div class="k">Advances pending</div><div class="v" id="kv-adv"></div><div class="s">' + (k.pendingCount ? fmtINR(k.pendingBalance) + ' balance due' : 'nothing outstanding') + '</div></div>';
+    countUp($('kv-rev'), k.revenue, fmtINR); countUp($('kv-cnt'), k.count, fmtNum); countUp($('kv-cus'), k.customers, fmtNum); countUp($('kv-avg'), k.avg, fmtINR); $('kv-adv').textContent = fmtNum(k.pendingCount);
+  }
+  function renderCharts(r) {
+    const tr = trend(r);
+    $('trend-hint').textContent = r.gran === 'day' ? 'per day' : 'per month';
+    if (S.tables.trend) tableOf($('trend'), tr, [{ h: 'Period', f: x => x.label }, { h: 'Sales', f: x => fmtINR(x.value), num: true }]); else columnChart($('trend'), tr);
+
+    const pr = topProducts(r, S.prodMode);
+    $('prod-mode').textContent = S.prodMode === 'qty' ? 'By revenue' : 'By quantity';
+    if (S.tables.products) tableOf($('products'), pr, [{ h: 'Product', f: x => x.label }, { h: S.prodMode === 'qty' ? 'Qty' : 'Revenue', f: x => S.prodMode === 'qty' ? fmtNum(x.value) : fmtINR(x.value), num: true }, { h: '', f: x => x.sub }]);
+    else barList($('products'), pr, { fmt: S.prodMode === 'qty' ? fmtNum : fmtINR, aria: 'Top products' });
+
+    const cu = topCustomers(r);
+    if (S.tables.customers) tableOf($('customers'), cu, [{ h: 'Customer', f: x => x.label }, { h: 'Spend', f: x => fmtINR(x.value), num: true }, { h: '', f: x => x.sub }]);
+    else barList($('customers'), cu, { fmt: fmtINR, aria: 'Top customers' });
+
+    const dm = byDim(r, S.dim);
+    if (S.tables.dims) tableOf($('dims'), dm, [{ h: S.dim === 'paymentMode' ? 'Payment' : S.dim === 'city' ? 'City' : 'Source', f: x => x.label }, { h: 'Sales', f: x => fmtINR(x.value), num: true }, { h: '', f: x => x.sub }]);
+    else barList($('dims'), dm, { fmt: fmtINR, aria: 'Sales by ' + S.dim });
+  }
+  function renderBirthdays() {
+    const b = upcomingBirthdays();
+    $('birthdays').innerHTML = b.length ? '<div class="list">' + b.map(p =>
+      '<div class="li"><div><div class="t">' + esc(p.name || '—') + '</div><div class="m">' + esc(p.phone || '') + (p.lastItem ? ' · last bought ' + esc(p.lastItem) : '') + '</div></div>' +
+      '<div class="r"><div class="t">' + esc(p.when) + '</div><div class="m">' + (p.days === 0 ? '🎂 today' : p.days === 1 ? 'tomorrow' : 'in ' + p.days + ' days') + ' · ' + fmtINR(p.spend) + ' lifetime</div></div></div>').join('') + '</div>'
+      : '<div class="empty">No customer birthdays in the next 14 days.</div>';
+  }
+  function renderAdvances() {
+    const a = S.invoices.filter(i => i.status === 'pending').sort((x, y) => y.number - x.number);
+    $('adv-hint').textContent = a.length ? a.length + ' open' : '';
+    $('advances').innerHTML = a.length ? '<div class="list">' + a.map(i =>
+      '<div class="li"><div><div class="t"><a class="link" href="/?reprint=' + encodeURIComponent(i.invoiceID) + '">' + esc(i.invoiceID) + '</a> · ' + esc(i.customerName || '—') + '</div><div class="m">' + esc(i.date) + (i.phone ? ' · ' + esc(i.phone) : '') + '</div></div>' +
+      '<div class="r"><div class="t">' + fmtINR(i.balanceDue) + ' due</div><div class="m">paid ' + fmtINR(i.advancePaid) + ' of ' + fmtINR(i.grandTotal) + '</div></div></div>').join('') + '</div>'
+      : '<div class="empty">No pending advance invoices.</div>';
+  }
+  function renderRecent() {
+    const q = norm(S.search);
+    let rows = S.invoices.slice().sort((a, b) => b.number - a.number);
+    if (q) rows = rows.filter(i => norm([i.invoiceID, i.customerName, i.phone, i.city, i.createdBy].join(' ')).indexOf(q) > -1);
+    rows = rows.slice(0, q ? 100 : 25);
+    $('recent').innerHTML = '<table><thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>City</th><th class="num">Items</th><th class="num">Total</th><th>Status</th><th>By</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(i => '<tr><td><a class="link" href="/?reprint=' + encodeURIComponent(i.invoiceID) + '">' + esc(i.invoiceID) + '</a></td><td>' + esc(i.date) + '</td><td>' + esc(i.customerName || '—') + (i.phone ? '<div class="m" style="font-size:12px;color:var(--muted)">' + esc(i.phone) + '</div>' : '') + '</td><td>' + esc(i.city || '') + '</td><td class="num">' + i.items.length + '</td><td class="num">' + fmtINR(i.grandTotal) + '</td><td>' + (i.status === 'pending' ? '<span class="pill pending">⏳ Advance</span>' : '<span class="pill done">✓ Paid</span>') + '</td><td>' + esc(i.createdBy || '') + '</td></tr>').join('')
+        : '<tr><td colspan="8" class="empty">' + (S.invoices.length ? 'No invoices match.' : 'No invoices yet — save one from the invoice page, or import your Google Sheet below.') + '</td></tr>') +
+      '</tbody></table>';
+  }
+  function renderTeam() {
+    const rows = S.users.slice().sort((a, b) => (a.role === b.role ? a.email.localeCompare(b.email) : a.role === 'admin' ? -1 : 1));
+    $('team').innerHTML = '<table><thead><tr><th>Login</th><th>Role</th><th></th></tr></thead><tbody>' +
+      (rows.length ? rows.map(u => { const me = u.email === S.me; return '<tr><td>' + esc(u.email) + (me ? ' <span class="hint">(you)</span>' : '') + '</td><td><span class="pill ' + (u.role === 'admin' ? 'done' : 'pending') + '" style="background:var(--surface-2);color:var(--ink-2)">' + (u.role === 'admin' ? '★ Admin' : 'Staff') + '</span></td><td style="text-align:right;white-space:nowrap">' +
+        (me ? '' : '<button class="btn subtle" data-role="' + (u.role === 'admin' ? 'staff' : 'admin') + '" data-email="' + esc(u.email) + '">' + (u.role === 'admin' ? 'Make staff' : 'Make admin') + '</button> <button class="btn danger" data-remove="' + esc(u.email) + '">Remove</button>') + '</td></tr>'; }).join('')
+        : '<tr><td colspan="3" class="empty">No team entries yet.</td></tr>') + '</tbody></table>';
+  }
+  function renderData() {
+    $('data-note').innerHTML = S.ctx.isPreview
+      ? '<b>Preview site.</b> This preview keeps its own copy of the data, so anything you try here — imports, test invoices — never touches the live site. Import your Google Sheet here to see the dashboard with real numbers.'
+      : 'Import copies every invoice, advance and product from the Google Sheet into the database (safe to run more than once — nothing is duplicated). Export downloads everything as a CSV, one row per item, like the sheet.';
+  }
+
+  function render() {
+    const r = rangeFor(S.period);
+    renderPeriods(); renderHero(r); renderCharts(r); renderBirthdays(); renderAdvances(); renderRecent(); renderTeam(); renderData();
+  }
+
+  // ---------- events ----------
+  document.addEventListener('click', (ev) => {
+    const b = ev.target.closest('button'); if (!b) return;
+    if (b.dataset.p) { S.period = b.dataset.p; render(); }
+    else if (b.dataset.table) { S.tables[b.dataset.table] = !S.tables[b.dataset.table]; b.setAttribute('aria-pressed', String(!!S.tables[b.dataset.table])); renderCharts(rangeFor(S.period)); }
+    else if (b.dataset.dim) { S.dim = b.dataset.dim; document.querySelectorAll('#dim-tabs [data-dim]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); renderCharts(rangeFor(S.period)); }
+    else if (b.id === 'prod-mode') { S.prodMode = S.prodMode === 'qty' ? 'revenue' : 'qty'; renderCharts(rangeFor(S.period)); }
+  });
+  $('inv-search').addEventListener('input', (ev) => { S.search = ev.target.value; renderRecent(); });
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => renderCharts(rangeFor(S.period)), 120); });
+
+  // ---------- CSV ----------
+  function csv() {
+    const H = ['Invoice ID','Created By','Date','Customer Name','Phone','Birth Date','Source','Instagram ID','Mode Of Payment','City','Item','Price','Qty','Disc %','Flat Discount','Grand Total','Advance Paid','Balance Due','Status'];
+    const q = (v) => { const s = String(v === null || v === undefined ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const lines = [H.join(',')];
+    S.invoices.slice().sort((a, b) => a.number - b.number).forEach(i => {
+      const items = i.items.length ? i.items : [{ name: '', price: '', qty: '', discount: '' }];
+      items.forEach((it, idx) => { const last = idx === items.length - 1; lines.push([i.invoiceID, i.createdBy, i.date, i.customerName, i.phone, i.birthDate, i.source, i.instagramID, i.paymentMode, i.city, it.name, it.price, it.qty, it.discount, last ? i.flatDiscount : 0, last ? i.grandTotal : 0, last ? i.advancePaid : 0, last ? i.balanceDue : 0, i.status === 'pending' ? 'Pending' : 'Completed'].map(q).join(',')); });
+    });
+    return lines.join('\n');
+  }
+
+  // ---------- public API (used by the Firebase module) ----------
+  window.Dash = {
+    setData(invoices, products, users, ctx) {
+      S.invoices = (invoices || []).map(normalizeInvoice); S.products = products || []; S.users = users || [];
+      if (ctx) { S.ctx = Object.assign(S.ctx, ctx); if (ctx.me) S.me = ctx.me; }
+      $('preview-badge').hidden = !S.ctx.isPreview;
+      $('who').textContent = S.me || '';
+    },
+    render, show() { $('gate').hidden = true; $('app').hidden = false; },
+    gate(title, msg, spin) { $('gate-title').textContent = title; $('gate-msg').textContent = msg; $('gate-spin').hidden = !spin; $('gate').hidden = false; $('app').hidden = true; },
+    csv, state: S, kpis: () => kpis(rangeFor(S.period))
+  };
+})();
+</script>
+
+<!-- ============================================================
+     Firebase: login gate, data, team roles, import from the Sheet.
+     ============================================================ -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+  import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBkTazE-MvTXkMh79lwLiOaW2NeY8MpxyA",
+    authDomain: "mindori-invoices.firebaseapp.com",
+    projectId: "mindori-invoices",
+    storageBucket: "mindori-invoices.firebasestorage.app",
+    messagingSenderId: "732407548525",
+    appId: "1:732407548525:web:0d48a8f781cb8ee0f04d64",
+    measurementId: "G-KJCH8CLBQN"
+  };
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // Same data namespacing as the invoice page: preview sites keep their own copies.
+  const IS_PREVIEW = location.hostname.includes('--');
+  const NS = IS_PREVIEW ? 'preview_' : '';
+  const col = (name) => collection(db, NS + name);
+  const COUNTER_REF = doc(db, 'counters', NS + 'invoices');
+
+  // Same 24h session rule as the invoice page.
+  const SESSION_KEY = 'mindori_session_start';
+  const SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
+  const sessionExpired = () => { const t = parseInt(localStorage.getItem(SESSION_KEY), 10); return isNaN(t) || (Date.now() - t) >= SESSION_DURATION_MS; };
+
+  // Legacy Google Sheet endpoint — used only by "Import from Google Sheet".
+  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzh-MfzDY9uiEaixCQ36yWYzTh0lvUk3GltFDkQ9Vw9VINy1pOUta9Nh3HibFNXPn_S/exec';
+
+  let me = '';
+
+  async function roleOf(email) {
+    try { const s = await getDoc(doc(db, 'users', email)); return (s.exists() && s.data().role === 'admin') ? 'admin' : 'staff'; }
+    catch (e) { console.error('Role lookup failed:', e); return 'staff'; }
+  }
+
+  async function loadAll() {
+    const [inv, prod, users] = await Promise.all([getDocs(col('invoices')), getDocs(col('products')), getDocs(collection(db, 'users'))]);
+    Dash.setData(inv.docs.map(d => d.data()), prod.docs.map(d => d.data()), users.docs.map(d => Object.assign({ email: d.id }, d.data())), { isPreview: IS_PREVIEW, me });
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) { location.replace('/'); return; }
+    if (sessionExpired()) { localStorage.removeItem(SESSION_KEY); try { await signOut(auth); } catch (e) {} location.replace('/'); return; }
+    me = (user.email || '').toLowerCase();
+    const role = await roleOf(me);
+    if (role !== 'admin') {
+      Dash.gate('Admins only', 'This dashboard is for admins. Taking you to the invoice page…', false);
+      setTimeout(() => location.replace('/'), 2500);
+      return;
+    }
+    try { await loadAll(); Dash.show(); Dash.render(); }
+    catch (e) { console.error(e); Dash.gate('Could not load data', (e && e.message) || String(e), false); }
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', async () => { localStorage.removeItem(SESSION_KEY); try { await signOut(auth); } catch (e) {} location.replace('/'); });
+  document.getElementById('refresh-btn').addEventListener('click', async () => { const s = document.getElementById('data-status'); s.textContent = 'Refreshing…'; try { await loadAll(); Dash.render(); s.textContent = 'Up to date.'; } catch (e) { s.textContent = 'Could not refresh — ' + e.message; } });
+
+  // ---- Team & access ----
+  const teamStatus = document.getElementById('team-status');
+  document.getElementById('team-add').addEventListener('click', async () => {
+    const email = document.getElementById('team-email').value.trim().toLowerCase();
+    const role = document.getElementById('team-role').value;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { teamStatus.textContent = 'Enter the teammate\'s full login email (e.g. name@mindori.in).'; return; }
+    try { await setDoc(doc(db, 'users', email), { role, updatedBy: me, updatedAt: Date.now() }, { merge: true }); document.getElementById('team-email').value = ''; teamStatus.textContent = '✓ ' + email + ' is now ' + role + '.'; await loadAll(); Dash.render(); }
+    catch (e) { teamStatus.textContent = 'Could not save — ' + e.message; }
+  });
+  document.getElementById('team').addEventListener('click', async (ev) => {
+    const b = ev.target.closest('button'); if (!b) return;
+    try {
+      if (b.dataset.role) { await setDoc(doc(db, 'users', b.dataset.email), { role: b.dataset.role, updatedBy: me, updatedAt: Date.now() }, { merge: true }); teamStatus.textContent = '✓ ' + b.dataset.email + ' is now ' + b.dataset.role + '.'; }
+      else if (b.dataset.remove) { if (!confirm('Remove ' + b.dataset.remove + ' from the team list? They become ordinary staff.')) return; await deleteDoc(doc(db, 'users', b.dataset.remove)); teamStatus.textContent = '✓ Removed ' + b.dataset.remove + '.'; }
+      await loadAll(); Dash.render();
+    } catch (e) { teamStatus.textContent = 'Could not save — ' + e.message; }
+  });
+
+  // ---- Export ----
+  document.getElementById('export-btn').addEventListener('click', () => {
+    const blob = new Blob(['\uFEFF' + Dash.csv()], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'mindori-invoices-' + new Date().toISOString().slice(0, 10) + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+  });
+
+  // ---- Import from the Google Sheet (one-time, idempotent) ----
+  const dataStatus = document.getElementById('data-status');
+  async function sheetJSON(action, secret) {
+    const res = await fetch(SCRIPT_URL + '?action=' + action + '&secret=' + encodeURIComponent(secret), { method: 'GET' });
+    const text = await res.text(); let data; try { data = JSON.parse(text); } catch (e) { throw new Error('The Apps Script did not return data for ' + action + ' (HTTP ' + res.status + ')'); }
+    if (data.status !== 'success') throw new Error(data.message || ('Apps Script error on ' + action));
+    return data;
+  }
+  const numberOf = (id) => { const m = String(id || '').match(/(\d+)\s*$/); return m ? parseInt(m[1], 10) : 0; };
+  const isoOf = (s) => { const m = String(s || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m ? (m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0')) : ''; };
+  const n = (v) => { const x = parseFloat(v); return isNaN(x) ? 0 : x; };
+  const s = (v) => (v === null || v === undefined) ? '' : String(v).trim();
+  function toDoc(inv, status) {
+    return { invoiceID: s(inv.invoiceID), number: numberOf(inv.invoiceID), createdBy: s(inv.createdBy), date: s(inv.date), dateISO: isoOf(inv.date),
+      customerName: s(inv.customerName), phone: s(inv.phone), birthDate: s(inv.birthDate), source: s(inv.source), instagramID: s(inv.instagramID), paymentMode: s(inv.paymentMode), city: s(inv.city),
+      items: (inv.items || []).filter(it => s(it.name)).map(it => ({ name: s(it.name), price: n(it.price), qty: n(it.qty) || 1, discount: n(it.discount) })),
+      flatDiscount: n(inv.flatDiscount), grandTotal: n(inv.grandTotal), advancePaid: n(inv.advancePaid), balanceDue: n(inv.balanceDue), status, importedAt: Date.now() };
+  }
+  document.getElementById('import-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('import-btn');
+    if (!confirm('Import every invoice, advance and product from the Google Sheet into ' + (IS_PREVIEW ? 'the PREVIEW database' : 'the live database') + '?\n\nSafe to run more than once — nothing is duplicated.')) return;
+    btn.disabled = true;
+    try {
+      dataStatus.textContent = 'Reading the sheet key…';
+      const cfg = await getDoc(doc(db, 'config', 'sheet'));
+      const secret = cfg.exists() ? cfg.data().secret : null;
+      if (!secret) throw new Error('No sheet key found at config/sheet → secret.');
+      dataStatus.textContent = 'Fetching invoices, advances and products from Google Sheets…';
+      const [main, adv, prods] = await Promise.all([sheetJSON('list', secret), sheetJSON('listAdvance', secret), sheetJSON('products', secret)]);
+      const docs = new Map();
+      (main.invoices || []).forEach(i => { if (s(i.invoiceID)) docs.set(s(i.invoiceID), toDoc(i, 'completed')); });
+      let pendingCount = 0;
+      (adv.invoices || []).forEach(i => {
+        const id = s(i.invoiceID); if (!id) return;
+        const done = s(i.status).toLowerCase() === 'completed';
+        if (done) { if (docs.has(id)) { const d = docs.get(id); d.advancePaid = d.advancePaid || n(i.advancePaid); } return; } // final copy already in main
+        if (!docs.has(id)) { docs.set(id, toDoc(i, 'pending')); pendingCount++; }
+      });
+      const productDocs = (prods.products || []).filter(p => s(p.name)).map(p => ({ name: s(p.name), price: n(p.price), category: s(p.category), importedAt: Date.now() }));
+      // Write in batches of 400 (limit is 500 per batch).
+      let written = 0; const all = Array.from(docs.values());
+      for (let i = 0; i < all.length; i += 400) {
+        const b = writeBatch(db);
+        all.slice(i, i + 400).forEach(d => b.set(doc(col('invoices'), d.invoiceID), d, { merge: true }));
+        await b.commit(); written += Math.min(400, all.length - i);
+        dataStatus.textContent = 'Saving invoices… ' + written + ' / ' + all.length;
+      }
+      for (let i = 0; i < productDocs.length; i += 400) {
+        const b = writeBatch(db);
+        productDocs.slice(i, i + 400).forEach(p => b.set(doc(col('products'), encodeURIComponent(p.name.toLowerCase().replace(/\s+/g, ' '))), p, { merge: true }));
+        await b.commit();
+      }
+      // Keep the invoice counter ahead of every imported number.
+      const maxNum = all.reduce((m, d) => Math.max(m, d.number), 0);
+      const cs = await getDoc(COUNTER_REF); const cur = cs.exists() ? n(cs.data().lastNumber) : 0;
+      if (maxNum > cur) await setDoc(COUNTER_REF, { lastNumber: maxNum }, { merge: true });
+      dataStatus.textContent = '✓ Imported ' + all.length + ' invoices (' + pendingCount + ' pending advances) and ' + productDocs.length + ' products. Next invoice number: MIN-' + String(Math.max(maxNum, cur) + 1).padStart(7, '0') + '.';
+      await loadAll(); Dash.render();
+    } catch (e) {
+      console.error(e); dataStatus.textContent = 'Import failed — ' + (e && e.message ? e.message : String(e));
+    } finally { btn.disabled = false; }
+  });
+</script>
+</body>
+</html>
