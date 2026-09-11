@@ -175,8 +175,10 @@
   .wa { color: #128C7E; font-weight: 700; text-decoration: none; margin-left: 6px; font-size: 11px; letter-spacing: .02em; }
   .prod-grid { grid-template-columns: 1.6fr 1fr; }
   @media (max-width: 900px) { .prod-grid { grid-template-columns: 1fr; } }
-  .drawer-back { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 29; }
-  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: min(560px, 100vw); background: var(--surface); border-left: 1px solid var(--ring); box-shadow: -16px 0 48px -24px rgba(0,0,0,0.5); z-index: 30; overflow: auto; padding: 22px 22px 40px; animation: slidein .22s ease; }
+  .drawer-back { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 29; touch-action: none; }
+  /* Pinned top-to-bottom of the *visible* viewport (not 100vh, which on phone browsers runs under the toolbar); the panel itself scrolls. */
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: var(--surface); border-left: 1px solid var(--ring); box-shadow: -16px 0 48px -24px rgba(0,0,0,0.5); z-index: 30; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 22px 22px calc(40px + env(safe-area-inset-bottom)); animation: slidein .22s ease; }
+  html.drawer-open { overflow: hidden; }
   @keyframes slidein { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
   .drawer h2 { margin: 0 0 2px; font-size: 20px; letter-spacing: -0.01em; padding-right: 40px; }
   .drawer .sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
@@ -185,7 +187,7 @@
   .kv .k { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
   .kv .v { font-size: 17px; font-weight: 700; margin-top: 2px; }
   .drawer h4 { margin: 18px 0 8px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); padding-left: 9px; border-left: 3px solid var(--brand); }
-  .close-x { position: absolute; top: 14px; right: 14px; border: 1px solid var(--ring); background: var(--surface-2); color: var(--ink); border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 16px; }
+  .close-x { position: sticky; float: right; top: 0; margin: 0 -8px 0 0; z-index: 2; border: 1px solid var(--ring); background: var(--surface-2); color: var(--ink); border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 16px; }
   @media (max-width: 600px) { .kv { grid-template-columns: 1fr 1fr; } .tabs a { padding: 8px 10px; } }
 
   /* ---------- Target meter, segments ---------- */
@@ -881,9 +883,9 @@
       '<div class="kv"><div><div class="k">Visits</div><div class="v">' + c.visits + '</div></div><div><div class="k">Lifetime</div><div class="v">' + fmtINR(c.spend) + '</div></div><div><div class="k">Avg invoice</div><div class="v">' + fmtINR(c.avg) + '</div></div><div><div class="k">First visit</div><div class="v">' + esc(fmtDMY(c.first)) + '</div></div><div><div class="k">Last visit</div><div class="v">' + esc(fmtDMY(c.last)) + '</div></div><div><div class="k">Days since</div><div class="v">' + (c.daysSince === null ? '—' : c.daysSince) + '</div></div></div>' +
       '<h4>Items bought</h4><div class="list">' + c.itemsList.map(i => '<div class="li"><div class="t">' + esc(i.name) + '</div><div class="r"><b>' + fmtNum(i.qty) + '×</b> · ' + fmtINR(i.spend) + '</div></div>').join('') + '</div>' +
       '<h4>Invoice history</h4><div class="list">' + c.invoices.map(i => '<div class="li"><div><div class="t"><a class="link" href="/?reprint=' + encodeURIComponent(i.invoiceID) + '">' + esc(i.invoiceID) + '</a></div><div class="m">' + esc(i.date) + ' · ' + i.items.length + (i.items.length === 1 ? ' item' : ' items') + (i.paymentMode ? ' · ' + esc(i.paymentMode) : '') + (i.createdBy ? ' · by ' + esc(i.createdBy) : '') + '</div></div><div class="r"><b>' + fmtINR(i.grandTotal) + '</b></div></div>').join('') + '</div>';
-    $('cust-drawer').hidden = false; $('cust-drawer-back').hidden = false;
+    $('cust-drawer').hidden = false; $('cust-drawer-back').hidden = false; $('cust-drawer').scrollTop = 0; syncDrawerLock();
   }
-  function closeCustomer() { S.drawer = null; $('cust-drawer').hidden = true; $('cust-drawer-back').hidden = true; }
+  function closeCustomer() { S.drawer = null; $('cust-drawer').hidden = true; $('cust-drawer-back').hidden = true; syncDrawerLock(); }
   function customersCsv() {
     const H = ['Name','Phone','City','Instagram','Source','Birthday','Visits','Lifetime Spend','Avg Invoice','First Visit','Last Visit','Days Since','Last Bought'];
     return [H.join(',')].concat(customersFiltered().map(c => [c.name, c.phone, c.city, c.instagramID, c.source, bdayLabel(c.birthDate), c.visits, Math.round(c.spend), Math.round(c.avg), fmtDMY(c.first), fmtDMY(c.last), c.daysSince === null ? '' : c.daysSince, c.lastItems.slice(0, 3).join(', ')].map(csvq).join(','))).join('\n');
@@ -1095,8 +1097,10 @@
         : '<tr><td colspan="12" class="empty">' + (trashMode ? 'Trash is empty.' : src.length ? 'No invoices match.' : 'No invoices yet.') + '</td></tr>') + '</tbody></table>';
   }
   function findInvoice(id) { return S.invoices.find(i => i.invoiceID === id) || S.trash.find(i => i.invoiceID === id) || null; }
-  function openInvoice(id) { if (!findInvoice(id)) return; S.invOpen = id; S.invEdit = null; renderInvoiceDrawer(); $('inv-drawer').hidden = false; $('inv-drawer-back').hidden = false; }
-  function closeInvoice() { S.invOpen = null; S.invEdit = null; $('inv-drawer').hidden = true; $('inv-drawer-back').hidden = true; }
+  // While a drawer is open the page behind it stays put (the drawer is the only thing that scrolls).
+  function syncDrawerLock() { document.documentElement.classList.toggle('drawer-open', !!(S.invOpen || S.drawer)); }
+  function openInvoice(id) { if (!findInvoice(id)) return; S.invOpen = id; S.invEdit = null; renderInvoiceDrawer(); $('inv-drawer').hidden = false; $('inv-drawer-back').hidden = false; $('inv-drawer').scrollTop = 0; syncDrawerLock(); }
+  function closeInvoice() { S.invOpen = null; S.invEdit = null; $('inv-drawer').hidden = true; $('inv-drawer-back').hidden = true; syncDrawerLock(); }
   function startEdit() {
     const inv = findInvoice(S.invOpen); if (!inv) return;
     S.invEdit = JSON.parse(JSON.stringify({ invoiceID: inv.invoiceID, dateISO: inv.dateISO, customerName: inv.customerName, phone: inv.phone, instagramID: inv.instagramID, city: inv.city, source: inv.source, paymentMode: inv.paymentMode, birthISO: isoOfDDMMYYYY(inv.birthDate), items: inv.items.length ? inv.items : [{ name: '', price: 0, qty: 1, discount: 0 }], flatDiscount: inv.flatDiscount, advancePaid: inv.advancePaid }));
