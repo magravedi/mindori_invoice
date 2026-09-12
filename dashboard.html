@@ -380,6 +380,7 @@
             <select id="inv-status"><option value="all">All statuses</option><option value="completed">✓ Paid</option><option value="pending">⏳ Advance pending</option></select>
             <select id="inv-period"><option value="all">All time</option><option value="30d">Last 30 days</option><option value="mtd">This month</option><option value="lastm">Last month</option><option value="ytd">This year</option></select>
             <select id="inv-staff"><option value="">All staff</option></select>
+            <select id="inv-source"><option value="">All sources</option></select>
             <select id="inv-sort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="high">Highest total</option><option value="low">Lowest total</option></select>
           </div>
           <div class="sum" id="inv-sum"></div>
@@ -502,7 +503,7 @@
   // ---------- state ----------
   const S = { invoices: [], products: [], users: [], me: '', period: '30d', prodMode: 'revenue', dim: 'source', tables: {}, search: '', ctx: { isPreview: false },
               tab: 'overview', dirty: { overview: true, invoices: true, customers: true, products: true }, trash: [],
-              invQ: '', invStatus: 'all', invPeriod: 'all', invStaff: '', invSort: 'newest', invView: 'active', invOpen: null, invEdit: null, custSearch: '', custFilter: 'all', custSort: 'spend', prodSearch: '', prodCat: '', prodSort: 'revenue', editing: null, drawer: null,
+              invQ: '', invStatus: 'all', invPeriod: 'all', invStaff: '', invSource: '', invSort: 'newest', invView: 'active', invOpen: null, invEdit: null, custSearch: '', custFilter: 'all', custSort: 'spend', prodSearch: '', prodCat: '', prodSort: 'revenue', editing: null, drawer: null,
               settings: { targets: {} }, prodCatMode: 'revenue', editTarget: false, targetDraft: '' };
   const PERIODS = [
     { id: 'today', label: 'Today' }, { id: '7d', label: '7 days' }, { id: '30d', label: '30 days' },
@@ -1056,6 +1057,9 @@
   }
 
   // ==================== INVOICES TAB ====================
+  // Sources offered in the invoice page's dropdown and the edit drawer; the
+  // invoices filter lists these plus any other source seen on real invoices.
+  const STD_SOURCES = ['Walk-In', 'Instagram', 'WhatsApp', 'Aayushi', 'Siddhant', 'Manan', 'Gifting', 'Referral', 'Website'];
   const lineTotal = (it) => it.price * it.qty * (1 - it.discount / 100);
   // Same maths as the invoice page: item discounts, then the flat discount, never
   // below zero; balance due = total minus the advance paid.
@@ -1075,6 +1079,7 @@
     let rows = src.filter(i => (!a || i.dateISO >= a) && (!b || i.dateISO < b));
     if (S.invStatus === 'completed') rows = rows.filter(i => i.status !== 'pending'); else if (S.invStatus === 'pending') rows = rows.filter(i => i.status === 'pending');
     if (S.invStaff) rows = rows.filter(i => i.createdBy === S.invStaff);
+    if (S.invSource) rows = rows.filter(i => i.source === S.invSource);
     if (q) rows = rows.filter(i => norm([i.invoiceID, i.customerName, i.phone, i.city, i.createdBy, i.source, i.paymentMode, i.items.map(it => it.name).join(' ')].join(' ')).indexOf(q) > -1);
     const so = S.invSort;
     return rows.sort((x, y) => so === 'oldest' ? x.number - y.number : so === 'high' ? y.grandTotal - x.grandTotal : so === 'low' ? x.grandTotal - y.grandTotal : y.number - x.number);
@@ -1088,6 +1093,9 @@
     $('inv-title').textContent = trashMode ? 'Trash' : 'Invoices';
     const staff = Array.from(new Set(S.invoices.concat(S.trash).map(i => i.createdBy).filter(Boolean))).sort();
     $('inv-staff').innerHTML = '<option value="">All staff</option>' + staff.map(x => '<option value="' + esc(x) + '"' + (x === S.invStaff ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
+    const usedSrc = Array.from(new Set(S.invoices.concat(S.trash).map(i => i.source).filter(Boolean)));
+    const srcOpts = STD_SOURCES.concat(usedSrc.filter(x => STD_SOURCES.indexOf(x) === -1).sort());
+    $('inv-source').innerHTML = '<option value="">All sources</option>' + srcOpts.map(x => '<option value="' + esc(x) + '"' + (x === S.invSource ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
     const rows = invoicesFiltered(); const src = trashMode ? S.trash : S.invoices; const total = rows.reduce((a, i) => a + i.grandTotal, 0);
     $('inv-sum').innerHTML = '<b>' + rows.length + '</b> of ' + src.length + (trashMode ? ' deleted' : '') + ' invoices · <b>' + fmtINR(total) + '</b>' + (trashMode || !rows.length ? '' : ' · avg ' + fmtINR(total / rows.length));
     $('inv-table').innerHTML = '<table><thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>City</th><th>Source</th><th>Payment</th><th>Items</th><th class="num">Discount</th><th class="num">Total</th><th>Status</th><th>By</th><th></th></tr></thead><tbody>' +
@@ -1135,7 +1143,7 @@
       return;
     }
     const opts = (vals) => vals.map(v => '<option value="' + esc(v) + '">').join('');
-    const sources = Array.from(new Set(['Walk-In', 'Instagram', 'WhatsApp', 'Aayushi', 'Siddhant', 'Manan', 'Gifting', 'Referral', 'Website'].concat(S.invoices.map(i => i.source)).filter(Boolean)));
+    const sources = Array.from(new Set(STD_SOURCES.concat(S.invoices.map(i => i.source)).filter(Boolean)));
     const pays = Array.from(new Set(['Cash', 'Google Pay', 'UPI', 'Card', 'Both'].concat(S.invoices.map(i => i.paymentMode)).filter(Boolean)));
     const prodNames = S.products.map(pr => str(pr.name)).filter(Boolean).sort();
     d.innerHTML = '<button class="close-x" id="inv-drawer-close" aria-label="Close">✕</button><h2>Edit ' + esc(E.invoiceID) + '</h2><div class="sub">Saves to this same invoice number — nothing is duplicated.</div>' +
@@ -1256,6 +1264,7 @@
   $('inv-status').addEventListener('change', (ev) => { S.invStatus = ev.target.value; renderInvoices(); });
   $('inv-period').addEventListener('change', (ev) => { S.invPeriod = ev.target.value; renderInvoices(); });
   $('inv-staff').addEventListener('change', (ev) => { S.invStaff = ev.target.value; renderInvoices(); });
+  $('inv-source').addEventListener('change', (ev) => { S.invSource = ev.target.value; renderInvoices(); });
   $('inv-sort').addEventListener('change', (ev) => { S.invSort = ev.target.value; renderInvoices(); });
   $('inv-table').addEventListener('click', (ev) => { if (ev.target.closest('button') || ev.target.closest('a')) return; const tr = ev.target.closest('tr[data-inv]'); if (tr) openInvoice(tr.dataset.inv); });
   $('inv-drawer').addEventListener('input', () => { if (S.invEdit) updateEditTotals(); });
