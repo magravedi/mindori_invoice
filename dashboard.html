@@ -1135,7 +1135,7 @@
       return;
     }
     const opts = (vals) => vals.map(v => '<option value="' + esc(v) + '">').join('');
-    const sources = Array.from(new Set(['Walk-In', 'Instagram', 'WhatsApp', 'Referral', 'Website'].concat(S.invoices.map(i => i.source)).filter(Boolean)));
+    const sources = Array.from(new Set(['Walk-In', 'Instagram', 'WhatsApp', 'Aayushi', 'Siddhant', 'Manan', 'Gifting', 'Referral', 'Website'].concat(S.invoices.map(i => i.source)).filter(Boolean)));
     const pays = Array.from(new Set(['Cash', 'Google Pay', 'UPI', 'Card', 'Both'].concat(S.invoices.map(i => i.paymentMode)).filter(Boolean)));
     const prodNames = S.products.map(pr => str(pr.name)).filter(Boolean).sort();
     d.innerHTML = '<button class="close-x" id="inv-drawer-close" aria-label="Close">✕</button><h2>Edit ' + esc(E.invoiceID) + '</h2><div class="sub">Saves to this same invoice number — nothing is duplicated.</div>' +
