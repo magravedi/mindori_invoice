@@ -411,6 +411,7 @@
               <option value="lapsed90">Not seen for 90+ days</option>
               <option value="bdaymonth">Birthday this month</option>
             </select>
+            <select id="cust-source"><option value="">All sources</option></select>
             <select id="cust-sort">
               <option value="spend">Sort: lifetime spend</option>
               <option value="visits">Sort: visits</option>
@@ -503,7 +504,7 @@
   // ---------- state ----------
   const S = { invoices: [], products: [], users: [], me: '', period: '30d', prodMode: 'revenue', dim: 'source', tables: {}, search: '', ctx: { isPreview: false },
               tab: 'overview', dirty: { overview: true, invoices: true, customers: true, products: true }, trash: [],
-              invQ: '', invStatus: 'all', invPeriod: 'all', invStaff: '', invSource: '', invSort: 'newest', invView: 'active', invOpen: null, invEdit: null, custSearch: '', custFilter: 'all', custSort: 'spend', prodSearch: '', prodCat: '', prodSort: 'revenue', editing: null, drawer: null,
+              invQ: '', invStatus: 'all', invPeriod: 'all', invStaff: '', invSource: '', invSort: 'newest', invView: 'active', invOpen: null, invEdit: null, custSearch: '', custFilter: 'all', custSource: '', custSort: 'spend', prodSearch: '', prodCat: '', prodSort: 'revenue', editing: null, drawer: null,
               settings: { targets: {} }, prodCatMode: 'revenue', editTarget: false, targetDraft: '' };
   const PERIODS = [
     { id: 'today', label: 'Today' }, { id: '7d', label: '7 days' }, { id: '30d', label: '30 days' },
@@ -859,6 +860,7 @@
     else if (S.custFilter === 'new30') rows = rows.filter(c => c.first >= iso30);
     else if (S.custFilter === 'lapsed90') rows = rows.filter(c => c.daysSince !== null && c.daysSince >= 90);
     else if (S.custFilter === 'bdaymonth') rows = rows.filter(c => { const m = str(c.birthDate).match(/^\d{1,2}\/(\d{1,2})\//); return m && +m[1] === mon; });
+    if (S.custSource) rows = rows.filter(c => c.source === S.custSource);
     if (q) rows = rows.filter(c => norm([c.name, c.phone, c.city, c.instagramID, c.source].join(' ')).indexOf(q) > -1);
     const so = S.custSort;
     rows.sort((a, b) => so === 'visits' ? (b.visits - a.visits || b.spend - a.spend)
@@ -870,6 +872,9 @@
   }
   function renderCustomers() {
     const rows = customersFiltered(); const all = customers();
+    const usedCSrc = Array.from(new Set(all.map(c => c.source).filter(Boolean)));
+    const cSrcOpts = STD_SOURCES.concat(usedCSrc.filter(x => STD_SOURCES.indexOf(x) === -1).sort());
+    $('cust-source').innerHTML = '<option value="">All sources</option>' + cSrcOpts.map(x => '<option value="' + esc(x) + '"' + (x === S.custSource ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
     $('cust-count').textContent = rows.length === all.length ? all.length + ' customers' : rows.length + ' of ' + all.length + ' customers';
     $('cust-table').innerHTML = '<table><thead><tr><th>Name</th><th>Segment</th><th>Phone</th><th>City</th><th>Source</th><th>Birthday</th><th class="num">Visits</th><th class="num">Lifetime</th><th class="num">Avg</th><th>First</th><th>Last</th><th class="num">Days</th><th>Last bought</th></tr></thead><tbody>' +
       (rows.length ? rows.map(c => '<tr class="clickable" data-cust="' + esc(c.key) + '"><td><b>' + esc(c.name) + '</b>' + (c.instagramID ? '<div style="font-size:12px;color:var(--muted)">' + esc(c.instagramID) + '</div>' : '') + '</td><td>' + segPills(c) + '</td><td>' + esc(c.phone) + (waLink(c.phone) ? ' <a class="wa" href="' + waLink(c.phone) + '" target="_blank" rel="noopener" title="Message on WhatsApp">WA</a>' : '') + '</td><td>' + esc(c.city) + '</td><td>' + esc(c.source) + '</td><td>' + esc(bdayLabel(c.birthDate)) + '</td><td class="num">' + c.visits + '</td><td class="num"><b>' + fmtINR(c.spend) + '</b></td><td class="num">' + fmtINR(c.avg) + '</td><td>' + esc(fmtDMY(c.first)) + '</td><td>' + esc(fmtDMY(c.last)) + '</td><td class="num">' + (c.daysSince === null ? '' : c.daysSince) + '</td><td>' + esc(c.lastItems.slice(0, 3).join(', ')) + '</td></tr>').join('')
@@ -1059,7 +1064,7 @@
   // ==================== INVOICES TAB ====================
   // Sources offered in the invoice page's dropdown and the edit drawer; the
   // invoices filter lists these plus any other source seen on real invoices.
-  const STD_SOURCES = ['Walk-In', 'Instagram', 'WhatsApp', 'Aayushi', 'Siddhant', 'Manan', 'Gifting', 'Referral', 'Website'];
+  const STD_SOURCES = ['Walk-In', 'Instagram', 'WhatsApp', 'Aayushi', 'Siddhant', 'Manan', 'Gifting', 'Referral', 'Website', 'WorkSpaceCo.'];
   const lineTotal = (it) => it.price * it.qty * (1 - it.discount / 100);
   // Same maths as the invoice page: item discounts, then the flat discount, never
   // below zero; balance due = total minus the advance paid.
@@ -1253,6 +1258,7 @@
   $('inv-search').addEventListener('input', (ev) => { S.search = ev.target.value; renderRecent(); });
   $('cust-search').addEventListener('input', (ev) => { S.custSearch = ev.target.value; renderCustomers(); });
   $('cust-filter').addEventListener('change', (ev) => { S.custFilter = ev.target.value; renderCustomers(); });
+  $('cust-source').addEventListener('change', (ev) => { S.custSource = ev.target.value; renderCustomers(); });
   $('cust-sort').addEventListener('change', (ev) => { S.custSort = ev.target.value; renderCustomers(); });
   $('cust-table').addEventListener('click', (ev) => { if (ev.target.closest('a')) return; const tr = ev.target.closest('tr[data-cust]'); if (tr) openCustomer(tr.dataset.cust); });
   $('cust-drawer-back').addEventListener('click', closeCustomer);
