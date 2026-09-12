@@ -175,8 +175,10 @@
   .wa { color: #128C7E; font-weight: 700; text-decoration: none; margin-left: 6px; font-size: 11px; letter-spacing: .02em; }
   .prod-grid { grid-template-columns: 1.6fr 1fr; }
   @media (max-width: 900px) { .prod-grid { grid-template-columns: 1fr; } }
-  .drawer-back { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 29; }
-  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: min(560px, 100vw); background: var(--surface); border-left: 1px solid var(--ring); box-shadow: -16px 0 48px -24px rgba(0,0,0,0.5); z-index: 30; overflow: auto; padding: 22px 22px 40px; animation: slidein .22s ease; }
+  .drawer-back { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 29; touch-action: none; }
+  /* Pinned top-to-bottom of the *visible* viewport (not 100vh, which on phone browsers runs under the toolbar); the panel itself scrolls. */
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: var(--surface); border-left: 1px solid var(--ring); box-shadow: -16px 0 48px -24px rgba(0,0,0,0.5); z-index: 30; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 22px 22px calc(40px + env(safe-area-inset-bottom)); animation: slidein .22s ease; }
+  html.drawer-open { overflow: hidden; }
   @keyframes slidein { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
   .drawer h2 { margin: 0 0 2px; font-size: 20px; letter-spacing: -0.01em; padding-right: 40px; }
   .drawer .sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
@@ -185,7 +187,7 @@
   .kv .k { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
   .kv .v { font-size: 17px; font-weight: 700; margin-top: 2px; }
   .drawer h4 { margin: 18px 0 8px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); padding-left: 9px; border-left: 3px solid var(--brand); }
-  .close-x { position: absolute; top: 14px; right: 14px; border: 1px solid var(--ring); background: var(--surface-2); color: var(--ink); border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 16px; }
+  .close-x { position: sticky; float: right; top: 0; margin: 0 -8px 0 0; z-index: 2; border: 1px solid var(--ring); background: var(--surface-2); color: var(--ink); border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 16px; }
   @media (max-width: 600px) { .kv { grid-template-columns: 1fr 1fr; } .tabs a { padding: 8px 10px; } }
 
   /* ---------- Target meter, segments ---------- */
@@ -205,6 +207,24 @@
   .target-form input { width: 160px; }
   .big-pct { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; color: var(--brand-ink); line-height: 1; }
   .neg { color: var(--bad); }
+
+  /* ---------- Invoices tab ---------- */
+  .sum { font-size: 13px; color: var(--ink-2); margin: 0 0 10px; }
+  .sum b { color: var(--ink); }
+  .items-tbl td, .items-tbl th { padding: 6px 6px; }
+  .items-tbl input { width: 84px; }
+  .items-tbl input.name { width: 100%; min-width: 160px; }
+  .fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+  .fgrid label { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; display: block; margin-bottom: 3px; }
+  .fgrid input { width: 100%; max-width: none; }
+  .totals { margin-top: 10px; border-top: 1px solid var(--grid); padding-top: 8px; font-size: 13px; }
+  .totals div { display: flex; justify-content: space-between; padding: 2px 0; }
+  .totals .gt { font-size: 16px; font-weight: 800; }
+  .drawer.wide { width: min(720px, 100vw); }
+  .trash-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .pill.trash { background: var(--bad-bg); color: var(--bad); }
+  .row-actions { white-space: nowrap; text-align: right; }
+  @media (max-width: 600px) { .fgrid { grid-template-columns: 1fr; } }
 
   /* ---------- Motion (staged, once) ---------- */
   .reveal { opacity: 0; transform: translateY(8px); animation: rise .5s ease forwards; }
@@ -241,6 +261,7 @@
     </div>
     <nav class="tabs" id="tabs" aria-label="Sections">
       <a href="#overview" data-tab="overview" aria-current="page">Overview</a>
+      <a href="#invoices" data-tab="invoices">Invoices</a>
       <a href="#customers" data-tab="customers">Customers</a>
       <a href="#products" data-tab="products">Products</a>
     </nav>
@@ -315,7 +336,7 @@
 
     <section>
       <div class="card reveal" style="animation-delay:.35s">
-        <div class="card-head"><h3>Recent invoices</h3><input class="search" id="inv-search" placeholder="Search invoice #, name, phone, city…"></div>
+        <div class="card-head"><h3>Recent invoices</h3><div class="row"><input class="search" id="inv-search" placeholder="Search invoice #, name, phone, city…"><a class="tog" href="#invoices" style="text-decoration:none">All invoices →</a></div></div>
         <div class="tbl-wrap" id="recent"></div>
       </div>
     </section>
@@ -342,6 +363,34 @@
         <div class="note" id="data-note"></div>
       </div>
     </section>
+    </div>
+
+    <div id="tab-invoices" class="tabpane" hidden>
+      <section>
+        <div class="card reveal">
+          <div class="card-head"><h3 id="inv-title">Invoices</h3>
+            <div class="row">
+              <button class="tog" id="inv-view-active" aria-pressed="true">Invoices</button>
+              <button class="tog" id="inv-view-trash" aria-pressed="false">🗑 Trash <span id="inv-trash-count"></span></button>
+              <button class="btn subtle sm" id="inv-export">⬆ Export CSV</button>
+            </div>
+          </div>
+          <div class="row toolbar">
+            <input class="search" id="inv-q" placeholder="Search number, name, phone, city, item, staff…">
+            <select id="inv-status"><option value="all">All statuses</option><option value="completed">✓ Paid</option><option value="pending">⏳ Advance pending</option></select>
+            <select id="inv-period"><option value="all">All time</option><option value="30d">Last 30 days</option><option value="mtd">This month</option><option value="lastm">Last month</option><option value="ytd">This year</option></select>
+            <select id="inv-staff"><option value="">All staff</option></select>
+            <select id="inv-sort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="high">Highest total</option><option value="low">Lowest total</option></select>
+          </div>
+          <div class="sum" id="inv-sum"></div>
+          <div class="trash-bar" id="inv-trash-bar" hidden><span class="hint">Deleted invoices stay here until you restore them or delete them forever. Their numbers are never reused.</span><button class="btn danger sm" id="inv-empty-trash">Empty trash</button></div>
+          <div class="tbl-wrap" id="inv-table"></div>
+          <div class="status" id="inv-status-msg"></div>
+          <div class="note">Tap an invoice to see every line. Edit changes the invoice in place (same number). Delete moves it to Trash, where it can be restored.</div>
+        </div>
+      </section>
+      <div class="drawer-back" id="inv-drawer-back" hidden></div>
+      <aside class="drawer wide" id="inv-drawer" hidden aria-label="Invoice details"></aside>
     </div>
 
     <div id="tab-customers" class="tabpane" hidden>
@@ -452,7 +501,8 @@
 
   // ---------- state ----------
   const S = { invoices: [], products: [], users: [], me: '', period: '30d', prodMode: 'revenue', dim: 'source', tables: {}, search: '', ctx: { isPreview: false },
-              tab: 'overview', dirty: { overview: true, customers: true, products: true }, custSearch: '', custFilter: 'all', custSort: 'spend', prodSearch: '', prodCat: '', prodSort: 'revenue', editing: null, drawer: null,
+              tab: 'overview', dirty: { overview: true, invoices: true, customers: true, products: true }, trash: [],
+              invQ: '', invStatus: 'all', invPeriod: 'all', invStaff: '', invSort: 'newest', invView: 'active', invOpen: null, invEdit: null, custSearch: '', custFilter: 'all', custSort: 'spend', prodSearch: '', prodCat: '', prodSort: 'revenue', editing: null, drawer: null,
               settings: { targets: {} }, prodCatMode: 'revenue', editTarget: false, targetDraft: '' };
   const PERIODS = [
     { id: 'today', label: 'Today' }, { id: '7d', label: '7 days' }, { id: '30d', label: '30 days' },
@@ -833,9 +883,9 @@
       '<div class="kv"><div><div class="k">Visits</div><div class="v">' + c.visits + '</div></div><div><div class="k">Lifetime</div><div class="v">' + fmtINR(c.spend) + '</div></div><div><div class="k">Avg invoice</div><div class="v">' + fmtINR(c.avg) + '</div></div><div><div class="k">First visit</div><div class="v">' + esc(fmtDMY(c.first)) + '</div></div><div><div class="k">Last visit</div><div class="v">' + esc(fmtDMY(c.last)) + '</div></div><div><div class="k">Days since</div><div class="v">' + (c.daysSince === null ? '—' : c.daysSince) + '</div></div></div>' +
       '<h4>Items bought</h4><div class="list">' + c.itemsList.map(i => '<div class="li"><div class="t">' + esc(i.name) + '</div><div class="r"><b>' + fmtNum(i.qty) + '×</b> · ' + fmtINR(i.spend) + '</div></div>').join('') + '</div>' +
       '<h4>Invoice history</h4><div class="list">' + c.invoices.map(i => '<div class="li"><div><div class="t"><a class="link" href="/?reprint=' + encodeURIComponent(i.invoiceID) + '">' + esc(i.invoiceID) + '</a></div><div class="m">' + esc(i.date) + ' · ' + i.items.length + (i.items.length === 1 ? ' item' : ' items') + (i.paymentMode ? ' · ' + esc(i.paymentMode) : '') + (i.createdBy ? ' · by ' + esc(i.createdBy) : '') + '</div></div><div class="r"><b>' + fmtINR(i.grandTotal) + '</b></div></div>').join('') + '</div>';
-    $('cust-drawer').hidden = false; $('cust-drawer-back').hidden = false;
+    $('cust-drawer').hidden = false; $('cust-drawer-back').hidden = false; $('cust-drawer').scrollTop = 0; syncDrawerLock();
   }
-  function closeCustomer() { S.drawer = null; $('cust-drawer').hidden = true; $('cust-drawer-back').hidden = true; }
+  function closeCustomer() { S.drawer = null; $('cust-drawer').hidden = true; $('cust-drawer-back').hidden = true; syncDrawerLock(); }
   function customersCsv() {
     const H = ['Name','Phone','City','Instagram','Source','Birthday','Visits','Lifetime Spend','Avg Invoice','First Visit','Last Visit','Days Since','Last Bought'];
     return [H.join(',')].concat(customersFiltered().map(c => [c.name, c.phone, c.city, c.instagramID, c.source, bdayLabel(c.birthDate), c.visits, Math.round(c.spend), Math.round(c.avg), fmtDMY(c.first), fmtDMY(c.last), c.daysSince === null ? '' : c.daysSince, c.lastItems.slice(0, 3).join(', ')].map(csvq).join(','))).join('\n');
@@ -1005,8 +1055,122 @@
     return { profit: cur.profit, prev: prev ? prev.profit : null, known: cur.known, unknown: cur.unknown, anyCost: cost.size > 0 };
   }
 
+  // ==================== INVOICES TAB ====================
+  const lineTotal = (it) => it.price * it.qty * (1 - it.discount / 100);
+  // Same maths as the invoice page: item discounts, then the flat discount, never
+  // below zero; balance due = total minus the advance paid.
+  function totalsOf(inv) {
+    const subtotal = inv.items.reduce((a, it) => a + it.price * it.qty, 0);
+    const afterItems = inv.items.reduce((a, it) => a + lineTotal(it), 0);
+    const grandTotal = Math.max(0, afterItems - num(inv.flatDiscount));
+    return { subtotal, itemDiscount: subtotal - afterItems, grandTotal, balanceDue: Math.max(0, grandTotal - num(inv.advancePaid)) };
+  }
+  function invoicesFiltered() {
+    const src = S.invView === 'trash' ? S.trash : S.invoices;
+    const q = norm(S.invQ); const t0 = today0(); let a = '', b = '';
+    if (S.invPeriod === '30d') a = isoOfDate(addDays(t0, -29));
+    else if (S.invPeriod === 'mtd') a = isoOfDate(new Date(t0.getFullYear(), t0.getMonth(), 1));
+    else if (S.invPeriod === 'lastm') { a = isoOfDate(new Date(t0.getFullYear(), t0.getMonth() - 1, 1)); b = isoOfDate(new Date(t0.getFullYear(), t0.getMonth(), 1)); }
+    else if (S.invPeriod === 'ytd') a = isoOfDate(new Date(t0.getFullYear(), 0, 1));
+    let rows = src.filter(i => (!a || i.dateISO >= a) && (!b || i.dateISO < b));
+    if (S.invStatus === 'completed') rows = rows.filter(i => i.status !== 'pending'); else if (S.invStatus === 'pending') rows = rows.filter(i => i.status === 'pending');
+    if (S.invStaff) rows = rows.filter(i => i.createdBy === S.invStaff);
+    if (q) rows = rows.filter(i => norm([i.invoiceID, i.customerName, i.phone, i.city, i.createdBy, i.source, i.paymentMode, i.items.map(it => it.name).join(' ')].join(' ')).indexOf(q) > -1);
+    const so = S.invSort;
+    return rows.sort((x, y) => so === 'oldest' ? x.number - y.number : so === 'high' ? y.grandTotal - x.grandTotal : so === 'low' ? x.grandTotal - y.grandTotal : y.number - x.number);
+  }
+  const statusPill = (i, trashMode) => trashMode ? '<span class="pill trash">🗑 Deleted</span>' : i.status === 'pending' ? '<span class="pill pending">⏳ Advance</span>' : '<span class="pill done">✓ Paid</span>';
+  function renderInvoices() {
+    const trashMode = S.invView === 'trash';
+    $('inv-view-active').setAttribute('aria-pressed', String(!trashMode)); $('inv-view-trash').setAttribute('aria-pressed', String(trashMode));
+    $('inv-trash-count').textContent = S.trash.length ? '(' + S.trash.length + ')' : '';
+    $('inv-trash-bar').hidden = !trashMode || !S.trash.length;
+    $('inv-title').textContent = trashMode ? 'Trash' : 'Invoices';
+    const staff = Array.from(new Set(S.invoices.concat(S.trash).map(i => i.createdBy).filter(Boolean))).sort();
+    $('inv-staff').innerHTML = '<option value="">All staff</option>' + staff.map(x => '<option value="' + esc(x) + '"' + (x === S.invStaff ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
+    const rows = invoicesFiltered(); const src = trashMode ? S.trash : S.invoices; const total = rows.reduce((a, i) => a + i.grandTotal, 0);
+    $('inv-sum').innerHTML = '<b>' + rows.length + '</b> of ' + src.length + (trashMode ? ' deleted' : '') + ' invoices · <b>' + fmtINR(total) + '</b>' + (trashMode || !rows.length ? '' : ' · avg ' + fmtINR(total / rows.length));
+    $('inv-table').innerHTML = '<table><thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>City</th><th>Source</th><th>Payment</th><th>Items</th><th class="num">Discount</th><th class="num">Total</th><th>Status</th><th>By</th><th></th></tr></thead><tbody>' +
+      (rows.length ? rows.map(i => { const t = totalsOf(i); const disc = t.itemDiscount + num(i.flatDiscount);
+        return '<tr class="clickable" data-inv="' + esc(i.invoiceID) + '"><td><b>' + esc(i.invoiceID) + '</b></td><td>' + esc(i.date) + '</td><td>' + esc(i.customerName || '—') + (i.phone ? '<div style="font-size:12px;color:var(--muted)">' + esc(i.phone) + '</div>' : '') + '</td><td>' + esc(i.city) + '</td><td>' + esc(i.source) + '</td><td>' + esc(i.paymentMode) + '</td><td>' + i.items.length + (i.items.length ? ' · ' + esc(i.items.slice(0, 2).map(it => it.name).join(', ')) + (i.items.length > 2 ? '…' : '') : '') + '</td><td class="num">' + (disc > 0 ? fmtINR(disc) : '—') + '</td><td class="num"><b>' + fmtINR(i.grandTotal) + '</b>' + (i.status === 'pending' ? '<div style="font-size:11px;color:var(--muted)">' + fmtINR(i.balanceDue) + ' due</div>' : '') + '</td><td>' + statusPill(i, trashMode) + '</td><td>' + esc(i.createdBy) + '</td>' +
+          '<td class="row-actions">' + (trashMode ? '<button class="btn subtle sm" data-inv-restore="' + esc(i.invoiceID) + '">↩ Restore</button> <button class="btn danger sm" data-inv-forever="' + esc(i.invoiceID) + '">Delete forever</button>' : '<button class="btn subtle sm" data-inv-open="' + esc(i.invoiceID) + '">View</button> <button class="btn danger sm" data-inv-trash="' + esc(i.invoiceID) + '">Delete</button>') + '</td></tr>'; }).join('')
+        : '<tr><td colspan="12" class="empty">' + (trashMode ? 'Trash is empty.' : src.length ? 'No invoices match.' : 'No invoices yet.') + '</td></tr>') + '</tbody></table>';
+  }
+  function findInvoice(id) { return S.invoices.find(i => i.invoiceID === id) || S.trash.find(i => i.invoiceID === id) || null; }
+  // While a drawer is open the page behind it stays put (the drawer is the only thing that scrolls).
+  function syncDrawerLock() { document.documentElement.classList.toggle('drawer-open', !!(S.invOpen || S.drawer)); }
+  function openInvoice(id) { if (!findInvoice(id)) return; S.invOpen = id; S.invEdit = null; renderInvoiceDrawer(); $('inv-drawer').hidden = false; $('inv-drawer-back').hidden = false; $('inv-drawer').scrollTop = 0; syncDrawerLock(); }
+  function closeInvoice() { S.invOpen = null; S.invEdit = null; $('inv-drawer').hidden = true; $('inv-drawer-back').hidden = true; syncDrawerLock(); }
+  function startEdit() {
+    const inv = findInvoice(S.invOpen); if (!inv) return;
+    S.invEdit = JSON.parse(JSON.stringify({ invoiceID: inv.invoiceID, dateISO: inv.dateISO, customerName: inv.customerName, phone: inv.phone, instagramID: inv.instagramID, city: inv.city, source: inv.source, paymentMode: inv.paymentMode, birthISO: isoOfDDMMYYYY(inv.birthDate), items: inv.items.length ? inv.items : [{ name: '', price: 0, qty: 1, discount: 0 }], flatDiscount: inv.flatDiscount, advancePaid: inv.advancePaid }));
+    renderInvoiceDrawer();
+  }
+  function readEditForm() {
+    const E = S.invEdit; if (!E) return;
+    const g = (id) => { const el = $(id); return el ? el.value : ''; };
+    E.dateISO = g('e-date'); E.customerName = g('e-name'); E.phone = g('e-phone'); E.instagramID = g('e-insta'); E.city = g('e-city'); E.source = g('e-source'); E.paymentMode = g('e-pay'); E.birthISO = g('e-bday');
+    E.flatDiscount = num(g('e-flat')); E.advancePaid = num(g('e-adv'));
+    document.querySelectorAll('#inv-drawer tr[data-row]').forEach(tr => { const i = +tr.dataset.row; if (!E.items[i]) return; E.items[i].name = tr.querySelector('.name').value; E.items[i].price = num(tr.querySelector('.price').value); E.items[i].qty = num(tr.querySelector('.qty').value) || 1; E.items[i].discount = num(tr.querySelector('.disc').value); });
+  }
+  const totalsHtml = (t, inv) => '<div><span>Subtotal</span><span>' + fmtINR(t.subtotal) + '</span></div>' + (t.itemDiscount > 0.005 ? '<div><span>Item discounts</span><span>− ' + fmtINR(t.itemDiscount) + '</span></div>' : '') + (num(inv.flatDiscount) ? '<div><span>Flat discount</span><span>− ' + fmtINR(inv.flatDiscount) + '</span></div>' : '') + '<div class="gt"><span>Grand total</span><span>' + fmtINR(t.grandTotal) + '</span></div>' + (num(inv.advancePaid) ? '<div><span>Advance paid</span><span>' + fmtINR(inv.advancePaid) + '</span></div><div><span>Balance due</span><span>' + fmtINR(t.balanceDue) + '</span></div>' : '');
+  function updateEditTotals() {
+    readEditForm(); const E = S.invEdit; if (!E) return;
+    E.items.forEach((it, i) => { const c = document.querySelector('#inv-drawer [data-line="' + i + '"]'); if (c) c.textContent = fmtINR(lineTotal(it)); });
+    $('e-totals').innerHTML = totalsHtml(totalsOf(E), E);
+  }
+  function renderInvoiceDrawer() {
+    const inv = findInvoice(S.invOpen); if (!inv) return; const E = S.invEdit; const d = $('inv-drawer'); const inTrash = inv.deleted === true;
+    if (!E) {
+      const t = totalsOf(inv);
+      d.innerHTML = '<button class="close-x" id="inv-drawer-close" aria-label="Close">✕</button>' +
+        '<h2>' + esc(inv.invoiceID) + ' ' + statusPill(inv, inTrash) + '</h2>' +
+        '<div class="sub">' + esc(inv.date) + ' · ' + esc(inv.customerName || '—') + (inv.phone ? ' · ' + esc(inv.phone) : '') + (inv.createdBy ? ' · by ' + esc(inv.createdBy) : '') + (inTrash && inv.deletedAt ? ' · deleted ' + esc(new Date(inv.deletedAt).toLocaleDateString('en-IN')) + (inv.deletedBy ? ' by ' + esc(inv.deletedBy) : '') : '') + '</div>' +
+        '<div class="row">' + (inTrash
+          ? '<button class="btn brand sm" data-inv-restore="' + esc(inv.invoiceID) + '">↩ Restore</button><button class="btn danger sm" data-inv-forever="' + esc(inv.invoiceID) + '">Delete forever</button>'
+          : '<button class="btn brand sm" id="inv-edit">✎ Edit</button><a class="btn subtle sm" href="/?reprint=' + encodeURIComponent(inv.invoiceID) + '">Open in invoice page · PDF</a><button class="btn danger sm" data-inv-trash="' + esc(inv.invoiceID) + '">🗑 Delete</button>') + '</div>' +
+        '<div class="kv">' + [['City', inv.city], ['Source', inv.source], ['Payment', inv.paymentMode], ['Instagram', inv.instagramID], ['Birthday', inv.birthDate], ['Items', String(inv.items.length)]].map(([k, v]) => '<div><div class="k">' + k + '</div><div class="v" style="font-size:14px">' + esc(v || '—') + '</div></div>').join('') + '</div>' +
+        '<h4>Items</h4><div class="tbl-wrap"><table class="items-tbl"><thead><tr><th>Item</th><th class="num">Price</th><th class="num">Qty</th><th class="num">Disc</th><th class="num">Line</th></tr></thead><tbody>' + inv.items.map(it => '<tr><td>' + esc(it.name) + '</td><td class="num">' + fmtINR(it.price) + '</td><td class="num">' + fmtNum(it.qty) + '</td><td class="num">' + (it.discount ? it.discount + '%' : '—') + '</td><td class="num">' + fmtINR(lineTotal(it)) + '</td></tr>').join('') + '</tbody></table></div>' +
+        '<div class="totals">' + totalsHtml(t, inv) + '</div>';
+      return;
+    }
+    const opts = (vals) => vals.map(v => '<option value="' + esc(v) + '">').join('');
+    const sources = Array.from(new Set(['Walk-In', 'Instagram', 'WhatsApp', 'Referral', 'Website'].concat(S.invoices.map(i => i.source)).filter(Boolean)));
+    const pays = Array.from(new Set(['Cash', 'Google Pay', 'UPI', 'Card', 'Both'].concat(S.invoices.map(i => i.paymentMode)).filter(Boolean)));
+    const prodNames = S.products.map(pr => str(pr.name)).filter(Boolean).sort();
+    d.innerHTML = '<button class="close-x" id="inv-drawer-close" aria-label="Close">✕</button><h2>Edit ' + esc(E.invoiceID) + '</h2><div class="sub">Saves to this same invoice number — nothing is duplicated.</div>' +
+      '<datalist id="dl-src">' + opts(sources) + '</datalist><datalist id="dl-pay">' + opts(pays) + '</datalist><datalist id="dl-prod">' + opts(prodNames) + '</datalist>' +
+      '<div class="fgrid">' + [['Date', '<input class="search" type="date" id="e-date" value="' + esc(E.dateISO) + '">'], ['Customer', '<input class="search" id="e-name" value="' + esc(E.customerName) + '">'], ['Phone', '<input class="search" id="e-phone" value="' + esc(E.phone) + '">'], ['Instagram', '<input class="search" id="e-insta" value="' + esc(E.instagramID) + '">'], ['City', '<input class="search" id="e-city" value="' + esc(E.city) + '">'], ['Source', '<input class="search" id="e-source" list="dl-src" value="' + esc(E.source) + '">'], ['Payment', '<input class="search" id="e-pay" list="dl-pay" value="' + esc(E.paymentMode) + '">'], ['Birthday', '<input class="search" type="date" id="e-bday" value="' + esc(E.birthISO || '') + '">']].map(([k, h]) => '<div><label>' + k + '</label>' + h + '</div>').join('') + '</div>' +
+      '<h4>Items</h4><div class="tbl-wrap"><table class="items-tbl"><thead><tr><th>Item</th><th class="num">Price</th><th class="num">Qty</th><th class="num">Disc %</th><th class="num">Line</th><th></th></tr></thead><tbody>' +
+      E.items.map((it, i) => '<tr data-row="' + i + '"><td><input class="search name" list="dl-prod" value="' + esc(it.name) + '" placeholder="Item"></td><td class="num"><input class="search price" type="number" min="0" step="1" value="' + it.price + '"></td><td class="num"><input class="search qty" type="number" min="1" step="1" value="' + it.qty + '"></td><td class="num"><input class="search disc" type="number" min="0" max="100" step="1" value="' + it.discount + '"></td><td class="num" data-line="' + i + '">' + fmtINR(lineTotal(it)) + '</td><td><button class="btn danger sm" data-row-del="' + i + '" title="Remove line">✕</button></td></tr>').join('') +
+      '</tbody></table></div><div class="row" style="margin-top:8px"><button class="btn subtle sm" id="e-add-row">＋ Add item</button></div>' +
+      '<div class="fgrid" style="margin-top:12px"><div><label>Flat discount (₹)</label><input class="search" type="number" min="0" step="1" id="e-flat" value="' + num(E.flatDiscount) + '"></div><div><label>Advance paid (₹)</label><input class="search" type="number" min="0" step="1" id="e-adv" value="' + num(E.advancePaid) + '"></div></div>' +
+      '<div class="totals" id="e-totals"></div>' +
+      '<div class="row" style="margin-top:14px"><button class="btn brand" id="inv-save">Save changes</button><button class="btn subtle" id="inv-cancel">Cancel</button></div><div class="status" id="inv-drawer-status"></div>';
+    updateEditTotals();
+  }
+  function buildEditedDoc() {
+    readEditForm(); const E = S.invEdit; const orig = findInvoice(S.invOpen);
+    const items = E.items.map(it => ({ name: str(it.name), price: num(it.price), qty: num(it.qty) || 1, discount: num(it.discount) })).filter(it => it.name);
+    if (!items.length) throw new Error('An invoice needs at least one item with a name.');
+    const t = totalsOf(Object.assign({}, E, { items }));
+    const dmy = (iso) => iso ? (iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4)) : '';
+    return Object.assign({}, orig, { customerName: str(E.customerName), phone: str(E.phone), instagramID: str(E.instagramID), city: str(E.city), source: str(E.source), paymentMode: str(E.paymentMode), birthDate: dmy(E.birthISO), date: dmy(E.dateISO) || orig.date, dateISO: E.dateISO || orig.dateISO, items, flatDiscount: num(E.flatDiscount), advancePaid: num(E.advancePaid), grandTotal: t.grandTotal, balanceDue: t.balanceDue });
+  }
+  async function invAction(fn, okMsg, closeAfter) {
+    const st = $('inv-status-msg'); st.textContent = 'Working…';
+    try { await fn(); st.textContent = okMsg; if (closeAfter) closeInvoice(); } catch (e) { st.textContent = 'Could not do that — ' + (e && e.message ? e.message : String(e)); }
+  }
+  function invoicesCsv() {
+    const trashMode = S.invView === 'trash';
+    const H = ['Invoice ID','Created By','Date','Customer Name','Phone','Birth Date','Source','Instagram ID','Mode Of Payment','City','Item','Price','Qty','Disc %','Flat Discount','Grand Total','Advance Paid','Balance Due','Status'].concat(trashMode ? ['Deleted At'] : []);
+    const lines = [H.join(',')];
+    invoicesFiltered().forEach(i => { const items = i.items.length ? i.items : [{ name: '', price: '', qty: '', discount: '' }]; items.forEach((it, idx) => { const last = idx === items.length - 1; lines.push([i.invoiceID, i.createdBy, i.date, i.customerName, i.phone, i.birthDate, i.source, i.instagramID, i.paymentMode, i.city, it.name, it.price, it.qty, it.discount, last ? i.flatDiscount : 0, last ? i.grandTotal : 0, last ? i.advancePaid : 0, last ? i.balanceDue : 0, i.status === 'pending' ? 'Pending' : 'Completed'].concat(trashMode ? [i.deletedAt ? new Date(i.deletedAt).toISOString().slice(0, 10) : ''] : []).map(csvq).join(',')); }); });
+    return lines.join('\n');
+  }
+
   // ==================== TABS ====================
-  const TABS = ['overview', 'customers', 'products'];
+  const TABS = ['overview', 'invoices', 'customers', 'products'];
   function tabFromHash() { const h = (location.hash || '').replace('#', ''); return TABS.indexOf(h) > -1 ? h : 'overview'; }
   function renderTabs() {
     document.querySelectorAll('#tabs a').forEach(a => { if (a.dataset.tab === S.tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
@@ -1017,7 +1181,8 @@
   // any data change; S.dirty tracks which tabs still need it.
   function renderTab(t, force) {
     if (!force && !S.dirty[t]) return;
-    if (t === 'customers') renderCustomers();
+    if (t === 'invoices') renderInvoices();
+    else if (t === 'customers') renderCustomers();
     else if (t === 'products') renderProducts();
     else { const r = rangeFor(S.period); renderPeriods(); renderHero(r); renderTarget(); renderNVR(r); renderCharts(r); renderWinback(); renderPairs(); renderBirthdays(); renderAdvances(); renderRecent(); renderTeam(); renderData(); }
     S.dirty[t] = false;
@@ -1032,6 +1197,24 @@
   document.addEventListener('click', (ev) => {
     const b = ev.target.closest('button'); if (!b) return;
     if (b.dataset.p) { S.period = b.dataset.p; renderTab('overview', true); }
+    else if (b.dataset.invOpen) openInvoice(b.dataset.invOpen);
+    else if (b.id === 'inv-drawer-close') closeInvoice();
+    else if (b.id === 'inv-edit') startEdit();
+    else if (b.id === 'inv-cancel') { S.invEdit = null; renderInvoiceDrawer(); }
+    else if (b.id === 'e-add-row') { readEditForm(); S.invEdit.items.push({ name: '', price: 0, qty: 1, discount: 0 }); renderInvoiceDrawer(); }
+    else if (b.dataset.rowDel !== undefined) { readEditForm(); S.invEdit.items.splice(+b.dataset.rowDel, 1); if (!S.invEdit.items.length) S.invEdit.items.push({ name: '', price: 0, qty: 1, discount: 0 }); renderInvoiceDrawer(); }
+    else if (b.id === 'inv-save') {
+      let docu; try { docu = buildEditedDoc(); } catch (e) { $('inv-drawer-status').textContent = e.message; return; }
+      const st = $('inv-drawer-status'); st.textContent = 'Saving…';
+      window.Dash.api.saveInvoice(docu).then(() => { S.invEdit = null; if (S.invOpen) renderInvoiceDrawer(); $('inv-status-msg').textContent = '✓ ' + docu.invoiceID + ' updated.'; }).catch(e => { st.textContent = 'Could not save — ' + (e && e.message ? e.message : String(e)); });
+    }
+    else if (b.dataset.invTrash) { const id = b.dataset.invTrash; if (confirm('Move ' + id + ' to Trash?\n\nIt disappears from every list and total, but can be restored any time.')) invAction(() => window.Dash.api.trashInvoice(id), '🗑 ' + id + ' moved to Trash.', true); }
+    else if (b.dataset.invRestore) { const id = b.dataset.invRestore; invAction(() => window.Dash.api.restoreInvoice(id), '↩ ' + id + ' restored.', true); }
+    else if (b.dataset.invForever) { const id = b.dataset.invForever; if (confirm('Delete ' + id + ' forever?\n\nThis cannot be undone.')) invAction(() => window.Dash.api.deleteInvoiceForever(id), '✕ ' + id + ' deleted forever.', true); }
+    else if (b.id === 'inv-empty-trash') { if (S.trash.length && confirm('Delete all ' + S.trash.length + ' invoices in Trash forever?\n\nThis cannot be undone.')) invAction(() => window.Dash.api.emptyTrash(S.trash.map(i => i.invoiceID)), '✕ Trash emptied.', true); }
+    else if (b.id === 'inv-view-active') { S.invView = 'active'; renderInvoices(); }
+    else if (b.id === 'inv-view-trash') { S.invView = 'trash'; renderInvoices(); }
+    else if (b.id === 'inv-export') download('mindori-invoices-' + (S.invView === 'trash' ? 'trash-' : '') + isoOfDate(new Date()) + '.csv', invoicesCsv());
     else if (b.id === 'cust-drawer-close') closeCustomer();
     else if (b.id === 'cust-export') download('mindori-customers-' + isoOfDate(new Date()) + '.csv', customersCsv());
     else if (b.id === 'prod-export') download('mindori-products-' + isoOfDate(new Date()) + '.csv', productsCsv());
@@ -1065,11 +1248,19 @@
   $('cust-sort').addEventListener('change', (ev) => { S.custSort = ev.target.value; renderCustomers(); });
   $('cust-table').addEventListener('click', (ev) => { if (ev.target.closest('a')) return; const tr = ev.target.closest('tr[data-cust]'); if (tr) openCustomer(tr.dataset.cust); });
   $('cust-drawer-back').addEventListener('click', closeCustomer);
-  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && S.drawer) closeCustomer(); });
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { if (S.drawer) closeCustomer(); if (S.invOpen) closeInvoice(); } });
   $('prod-search').addEventListener('input', (ev) => { S.prodSearch = ev.target.value; renderProducts(); });
   $('prod-cat').addEventListener('change', (ev) => { S.prodCat = ev.target.value; renderProducts(); });
   $('prod-sort').addEventListener('change', (ev) => { S.prodSort = ev.target.value; renderProducts(); });
-  window.addEventListener('hashchange', () => { closeCustomer(); S.tab = tabFromHash(); renderTabs(); renderTab(S.tab, false); });
+  $('inv-q').addEventListener('input', (ev) => { S.invQ = ev.target.value; renderInvoices(); });
+  $('inv-status').addEventListener('change', (ev) => { S.invStatus = ev.target.value; renderInvoices(); });
+  $('inv-period').addEventListener('change', (ev) => { S.invPeriod = ev.target.value; renderInvoices(); });
+  $('inv-staff').addEventListener('change', (ev) => { S.invStaff = ev.target.value; renderInvoices(); });
+  $('inv-sort').addEventListener('change', (ev) => { S.invSort = ev.target.value; renderInvoices(); });
+  $('inv-table').addEventListener('click', (ev) => { if (ev.target.closest('button') || ev.target.closest('a')) return; const tr = ev.target.closest('tr[data-inv]'); if (tr) openInvoice(tr.dataset.inv); });
+  $('inv-drawer').addEventListener('input', () => { if (S.invEdit) updateEditTotals(); });
+  $('inv-drawer-back').addEventListener('click', closeInvoice);
+  window.addEventListener('hashchange', () => { closeCustomer(); closeInvoice(); S.tab = tabFromHash(); renderTabs(); renderTab(S.tab, false); });
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (S.tab === 'overview') renderCharts(rangeFor(S.period)); else if (S.tab === 'products') renderProducts(); }, 120); });
 
   // ---------- CSV ----------
@@ -1087,15 +1278,17 @@
   // ---------- public API (used by the Firebase module) ----------
   window.Dash = {
     setData(invoices, products, users, ctx) {
-      S.invoices = (invoices || []).map(normalizeInvoice); S.products = products || []; S.users = users || [];
+      const all = (invoices || []).map(normalizeInvoice);
+      S.trash = all.filter(i => i.deleted === true); S.invoices = all.filter(i => i.deleted !== true);
+      S.products = products || []; S.users = users || [];
       if (ctx) { S.ctx = Object.assign(S.ctx, ctx); if (ctx.me) S.me = ctx.me; if (ctx.settings) S.settings = ctx.settings; }
-      S.dirty = { overview: true, customers: true, products: true };
+      S.dirty = { overview: true, invoices: true, customers: true, products: true };
       $('preview-badge').hidden = !S.ctx.isPreview;
       $('who').textContent = S.me || '';
     },
     render, show() { $('gate').hidden = true; $('app').hidden = false; },
     gate(title, msg, spin) { $('gate-title').textContent = title; $('gate-msg').textContent = msg; $('gate-spin').hidden = !spin; $('gate').hidden = false; $('app').hidden = true; },
-    csv, customersCsv, productsCsv, state: S, kpis: () => kpis(rangeFor(S.period)),
+    csv, customersCsv, productsCsv, invoicesCsv, state: S, kpis: () => kpis(rangeFor(S.period)),
     api: null   // set by the Firebase module: saveProduct(p), deleteProduct(name)
   };
 })();
@@ -1179,6 +1372,19 @@
     },
     async saveTarget(mk, amount) {
       await setDoc(doc(col('settings'), 'targets'), { [mk]: amount, updatedAt: Date.now(), updatedBy: me }, { merge: true });
+      await loadAll(); Dash.render();
+    },
+    // Invoices: edit in place; delete = move to Trash (soft), restore, or delete forever.
+    async saveInvoice(docu) {
+      const id = String(docu.invoiceID || '').trim(); if (!id) throw new Error('Missing invoice number');
+      await setDoc(doc(col('invoices'), id), Object.assign({}, docu, { deleted: false, updatedAt: Date.now(), updatedBy: me }), { merge: true });
+      await loadAll(); Dash.render();
+    },
+    async trashInvoice(id) { await setDoc(doc(col('invoices'), id), { deleted: true, deletedAt: Date.now(), deletedBy: me }, { merge: true }); await loadAll(); Dash.render(); },
+    async restoreInvoice(id) { await setDoc(doc(col('invoices'), id), { deleted: false, deletedAt: null, deletedBy: null, restoredAt: Date.now(), restoredBy: me }, { merge: true }); await loadAll(); Dash.render(); },
+    async deleteInvoiceForever(id) { await deleteDoc(doc(col('invoices'), id)); await loadAll(); Dash.render(); },
+    async emptyTrash(ids) {
+      for (let i = 0; i < ids.length; i += 400) { const b = writeBatch(db); ids.slice(i, i + 400).forEach(id => b.delete(doc(col('invoices'), id))); await b.commit(); }
       await loadAll(); Dash.render();
     },
     async deleteProduct(name) {

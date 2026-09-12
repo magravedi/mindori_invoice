@@ -2998,7 +2998,8 @@
   async function listAll_() {
     if (listCache_.data && (Date.now() - listCache_.at) < 15000) return listCache_.data;
     const snap = await getDocs(col('invoices'));
-    const data = snap.docs.map(d => d.data()).sort((a, b) => (a.number || 0) - (b.number || 0));
+    // Invoices moved to the dashboard's Trash are hidden everywhere on this page.
+    const data = snap.docs.map(d => d.data()).filter(i => i.deleted !== true).sort((a, b) => (a.number || 0) - (b.number || 0));
     listCache_ = { at: Date.now(), data };
     return data;
   }
