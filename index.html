@@ -1148,12 +1148,13 @@
         }
         window.__doTeamLogin();
     };
-    // Fresh page after a save. Drops a ?reprint=… deep link (so the same invoice
-    // doesn't reopen) while keeping an admin on the invoice page (?invoice=1).
+    // Fresh page after a save. A full navigation drops any ?reprint=… deep link
+    // (so the same invoice can't reopen) and, because the whole form is thrown
+    // away, a number that was just claimed can never be saved a second time.
+    // ?invoice=1 keeps an admin on the invoice page instead of the dashboard;
+    // it is harmless for staff, who always see the invoice page.
     function reloadFresh() {
-        const params = new URLSearchParams(location.search);
-        if (params.has('reprint') || params.has('invoice')) { location.replace('/?invoice=1'); }
-        else { reloadFresh(); }
+        location.replace('/?invoice=1');
     }
     document.getElementById('invoiceDate').valueAsDate = new Date();
 
@@ -2248,12 +2249,9 @@
         }
 
         btn.innerText = reprintMode ? "✓ UPDATED" : "✓ SAVED";
-        setTimeout(() => {
-            btn.innerText = "SAVE INVOICE";
-            btn.disabled = false;
-            dlBtn.disabled = false;
-            reloadFresh();
-        }, 1200);
+        // Leave both buttons disabled: the page navigates to a fresh invoice, so
+        // there is no window in which a second tap could record the same invoice.
+        setTimeout(() => { reloadFresh(); }, 1200);
     }
 
     // ==========================================
@@ -2606,9 +2604,11 @@
     async function generatePDF() {
         console.log("=== Mindori invoice v32 (searchable city) ===");
         const btn = document.getElementById('dl-button');
+        const saveBtn = document.getElementById('save-button');
         const element = document.getElementById('capture-area');
 
         btn.disabled = true;
+        if (saveBtn) saveBtn.disabled = true;
         btn.innerText = "RESERVING INVOICE NUMBER…";
 
         // Atomically claim the final invoice number from Firestore.
@@ -2633,6 +2633,7 @@
                 console.error("Failed to claim invoice number:", e);
                 alert("Could not reserve invoice number. Check your connection and try again.");
                 btn.disabled = false;
+                if (saveBtn) saveBtn.disabled = false;
                 btn.innerText = "DOWNLOAD INVOICE (PDF)";
                 return;
             }
@@ -2918,19 +2919,23 @@
             // Clean up the off-screen clone
             if (pdfWrapper.parentNode) pdfWrapper.parentNode.removeChild(pdfWrapper);
             setTimeout(() => {
-                btn.innerText = "DOWNLOAD INVOICE (PDF)";
-                btn.disabled = false;
-                // Only reload for a normal fresh invoice. In reprint or advance
-                // (create/finalize) modes, keep the form and mode intact so the
-                // user can continue (e.g. tap Save Advance / Complete & Finalize).
+                // A normal fresh invoice navigates to a blank one (buttons stay
+                // disabled through the reload, so it can't be recorded twice). In
+                // reprint or advance (create/finalize) modes keep the form, mode
+                // and both buttons live so the user can continue.
                 if (!reprintMode && appMode === 'normal' && !sheetSaveFailed) {
                     reloadFresh();
+                    return;
                 }
+                btn.innerText = "DOWNLOAD INVOICE (PDF)";
+                btn.disabled = false;
+                if (saveBtn) saveBtn.disabled = false;
             }, 1200);
         } catch (e) {
             console.error("PDF generation error:", e);
             if (pdfWrapper.parentNode) pdfWrapper.parentNode.removeChild(pdfWrapper);
             btn.disabled = false;
+            if (saveBtn) saveBtn.disabled = false;
             btn.innerText = "DOWNLOAD INVOICE (PDF)";
             reprintMode = false;
             alert("Error generating PDF. Please try again.");
