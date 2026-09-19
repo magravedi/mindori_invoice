@@ -1158,6 +1158,25 @@
     }
     document.getElementById('invoiceDate').valueAsDate = new Date();
 
+    // Number fields (price, qty, discount, flat discount, advance) default to
+    // "0". Clear that zero the moment the field is focused so staff can type the
+    // amount straight away instead of deleting the 0 first; if they leave it
+    // blank it falls back to 0 and totals recompute. Fields that use a
+    // placeholder (e.g. the advance pop-up) are left alone.
+    document.addEventListener('focusin', (e) => {
+        const el = e.target;
+        if (el && el.tagName === 'INPUT' && el.type === 'number' && !el.hasAttribute('placeholder') && el.value === '0') {
+            el.value = '';
+        }
+    });
+    document.addEventListener('focusout', (e) => {
+        const el = e.target;
+        if (el && el.tagName === 'INPUT' && el.type === 'number' && !el.hasAttribute('placeholder') && el.value.trim() === '') {
+            el.value = '0';
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    });
+
     // Major cities across India (state capitals + significant cities, with
     // strong Gujarat coverage). Surat is set as the default selection.
     const INDIA_CITIES = [
