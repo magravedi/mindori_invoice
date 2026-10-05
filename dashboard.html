@@ -221,6 +221,9 @@
   .totals div { display: flex; justify-content: space-between; padding: 2px 0; }
   .totals .gt { font-size: 16px; font-weight: 800; }
   .drawer.wide { width: min(720px, 100vw); }
+  .missing-bar { background: var(--bad-bg); border: 1px solid var(--ring); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; font-size: 13px; }
+  .missing-bar .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 6px; }
+  .missing-bar .hint { display: block; color: var(--ink-2); }
   .trash-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
   .pill.trash { background: var(--bad-bg); color: var(--bad); }
   .row-actions { white-space: nowrap; text-align: right; }
@@ -375,6 +378,7 @@
               <button class="btn subtle sm" id="inv-export">⬆ Export CSV</button>
             </div>
           </div>
+          <div class="missing-bar" id="inv-missing" hidden></div>
           <div class="row toolbar">
             <input class="search" id="inv-q" placeholder="Search number, name, phone, city, item, staff…">
             <select id="inv-status"><option value="all">All statuses</option><option value="completed">✓ Paid</option><option value="pending">⏳ Advance pending</option></select>
@@ -504,7 +508,7 @@
   // ---------- state ----------
   const S = { invoices: [], products: [], users: [], me: '', period: '30d', prodMode: 'revenue', dim: 'source', tables: {}, search: '', ctx: { isPreview: false },
               tab: 'overview', dirty: { overview: true, invoices: true, customers: true, products: true }, trash: [],
-              invQ: '', invStatus: 'all', invPeriod: 'all', invStaff: '', invSource: '', invSort: 'newest', invView: 'active', invOpen: null, invEdit: null, custSearch: '', custFilter: 'all', custSource: '', custSort: 'spend', prodSearch: '', prodCat: '', prodSort: 'revenue', editing: null, drawer: null,
+              invStub: null, invQ: '', invStatus: 'all', invPeriod: 'all', invStaff: '', invSource: '', invSort: 'newest', invView: 'active', invOpen: null, invEdit: null, custSearch: '', custFilter: 'all', custSource: '', custSort: 'spend', prodSearch: '', prodCat: '', prodSort: 'revenue', editing: null, drawer: null,
               settings: { targets: {} }, prodCatMode: 'revenue', editTarget: false, targetDraft: '' };
   const PERIODS = [
     { id: 'today', label: 'Today' }, { id: '7d', label: '7 days' }, { id: '30d', label: '30 days' },
@@ -1074,6 +1078,36 @@
     const grandTotal = Math.max(0, afterItems - num(inv.flatDiscount));
     return { subtotal, itemDiscount: subtotal - afterItems, grandTotal, balanceDue: Math.max(0, grandTotal - num(inv.advancePaid)) };
   }
+  // Invoice numbers that were reserved but never recorded: a PDF was downloaded,
+  // but the invoice never reached the database. Counted only from the first
+  // invoice made by the new system (older numbers come from the Sheet import and
+  // may have their own gaps) up to the highest number ever handed out.
+  function missingNumbers() {
+    const all = S.invoices.concat(S.trash);
+    if (!all.length) return [];
+    const have = new Set(all.map(i => i.number));
+    const native = all.filter(i => i.createdAt && !i.importedAt && i.number > 0).map(i => i.number);
+    if (!native.length) return [];
+    const lo = Math.min.apply(null, native);
+    const hi = Math.max(num(S.ctx.lastNumber), Math.max.apply(null, all.map(i => i.number)));
+    const out = [];
+    for (let n = lo; n <= hi; n++) if (!have.has(n)) out.push(n);
+    return out;
+  }
+  const idOfNumber = (n) => 'MIN-' + String(n).padStart(7, '0');
+  function blankInvoice(id) {
+    const iso = isoOfDate(today0());
+    return normalizeInvoice({ invoiceID: id, createdBy: '', date: fmtDMY(iso), dateISO: iso, customerName: '', phone: '', birthDate: '', source: '', instagramID: '', paymentMode: '', city: '', items: [], flatDiscount: 0, grandTotal: 0, advancePaid: 0, balanceDue: 0, status: 'completed', createdAt: Date.now(), recovered: true });
+  }
+  function renderMissing() {
+    const el = $('inv-missing'); const miss = S.invView === 'trash' ? [] : missingNumbers();
+    if (!miss.length) { el.hidden = true; el.innerHTML = ''; return; }
+    const shown = miss.slice(-40);
+    el.hidden = false;
+    el.innerHTML = '<b>⚠ ' + miss.length + ' invoice number' + (miss.length === 1 ? ' was' : 's were') + ' reserved but never recorded.</b>' +
+      '<div class="chips">' + shown.map(n => '<button class="btn subtle sm" data-inv-missing="' + idOfNumber(n) + '">' + idOfNumber(n) + '</button>').join('') + (miss.length > shown.length ? '<span class="hint">…and ' + (miss.length - shown.length) + ' older</span>' : '') + '</div>' +
+      '<span class="hint">These are invoices whose PDF was downloaded but never reached the database, so their sale is missing from every total. Tap a number to re-enter it from the PDF (the file name starts with the number). Numbers you deleted forever also appear here.</span>';
+  }
   function invoicesFiltered() {
     const src = S.invView === 'trash' ? S.trash : S.invoices;
     const q = norm(S.invQ); const t0 = today0(); let a = '', b = '';
@@ -1096,6 +1130,7 @@
     $('inv-trash-count').textContent = S.trash.length ? '(' + S.trash.length + ')' : '';
     $('inv-trash-bar').hidden = !trashMode || !S.trash.length;
     $('inv-title').textContent = trashMode ? 'Trash' : 'Invoices';
+    renderMissing();
     const staff = Array.from(new Set(S.invoices.concat(S.trash).map(i => i.createdBy).filter(Boolean))).sort();
     $('inv-staff').innerHTML = '<option value="">All staff</option>' + staff.map(x => '<option value="' + esc(x) + '"' + (x === S.invStaff ? ' selected' : '') + '>' + esc(x) + '</option>').join('');
     const usedSrc = Array.from(new Set(S.invoices.concat(S.trash).map(i => i.source).filter(Boolean)));
@@ -1109,11 +1144,11 @@
           '<td class="row-actions">' + (trashMode ? '<button class="btn subtle sm" data-inv-restore="' + esc(i.invoiceID) + '">↩ Restore</button> <button class="btn danger sm" data-inv-forever="' + esc(i.invoiceID) + '">Delete forever</button>' : '<button class="btn subtle sm" data-inv-open="' + esc(i.invoiceID) + '">View</button> <button class="btn danger sm" data-inv-trash="' + esc(i.invoiceID) + '">Delete</button>') + '</td></tr>'; }).join('')
         : '<tr><td colspan="12" class="empty">' + (trashMode ? 'Trash is empty.' : src.length ? 'No invoices match.' : 'No invoices yet.') + '</td></tr>') + '</tbody></table>';
   }
-  function findInvoice(id) { return S.invoices.find(i => i.invoiceID === id) || S.trash.find(i => i.invoiceID === id) || null; }
+  function findInvoice(id) { return S.invoices.find(i => i.invoiceID === id) || S.trash.find(i => i.invoiceID === id) || (S.invStub && S.invStub.invoiceID === id ? S.invStub : null); }
   // While a drawer is open the page behind it stays put (the drawer is the only thing that scrolls).
   function syncDrawerLock() { document.documentElement.classList.toggle('drawer-open', !!(S.invOpen || S.drawer)); }
   function openInvoice(id) { if (!findInvoice(id)) return; S.invOpen = id; S.invEdit = null; renderInvoiceDrawer(); $('inv-drawer').hidden = false; $('inv-drawer-back').hidden = false; $('inv-drawer').scrollTop = 0; syncDrawerLock(); }
-  function closeInvoice() { S.invOpen = null; S.invEdit = null; $('inv-drawer').hidden = true; $('inv-drawer-back').hidden = true; syncDrawerLock(); }
+  function closeInvoice() { S.invOpen = null; S.invEdit = null; S.invStub = null; $('inv-drawer').hidden = true; $('inv-drawer-back').hidden = true; syncDrawerLock(); }
   function startEdit() {
     const inv = findInvoice(S.invOpen); if (!inv) return;
     S.invEdit = JSON.parse(JSON.stringify({ invoiceID: inv.invoiceID, dateISO: inv.dateISO, customerName: inv.customerName, phone: inv.phone, instagramID: inv.instagramID, city: inv.city, source: inv.source, paymentMode: inv.paymentMode, birthISO: isoOfDDMMYYYY(inv.birthDate), items: inv.items.length ? inv.items : [{ name: '', price: 0, qty: 1, discount: 0 }], flatDiscount: inv.flatDiscount, advancePaid: inv.advancePaid }));
@@ -1213,7 +1248,8 @@
     else if (b.dataset.invOpen) openInvoice(b.dataset.invOpen);
     else if (b.id === 'inv-drawer-close') closeInvoice();
     else if (b.id === 'inv-edit') startEdit();
-    else if (b.id === 'inv-cancel') { S.invEdit = null; renderInvoiceDrawer(); }
+    else if (b.dataset.invMissing) { S.invStub = blankInvoice(b.dataset.invMissing); openInvoice(b.dataset.invMissing); startEdit(); }
+    else if (b.id === 'inv-cancel') { if (S.invStub && S.invOpen === S.invStub.invoiceID) closeInvoice(); else { S.invEdit = null; renderInvoiceDrawer(); } }
     else if (b.id === 'e-add-row') { readEditForm(); S.invEdit.items.push({ name: '', price: 0, qty: 1, discount: 0 }); renderInvoiceDrawer(); }
     else if (b.dataset.rowDel !== undefined) { readEditForm(); S.invEdit.items.splice(+b.dataset.rowDel, 1); if (!S.invEdit.items.length) S.invEdit.items.push({ name: '', price: 0, qty: 1, discount: 0 }); renderInvoiceDrawer(); }
     else if (b.id === 'inv-save') {
@@ -1303,7 +1339,7 @@
     },
     render, show() { $('gate').hidden = true; $('app').hidden = false; },
     gate(title, msg, spin) { $('gate-title').textContent = title; $('gate-msg').textContent = msg; $('gate-spin').hidden = !spin; $('gate').hidden = false; $('app').hidden = true; },
-    csv, customersCsv, productsCsv, invoicesCsv, state: S, kpis: () => kpis(rangeFor(S.period)),
+    csv, customersCsv, productsCsv, invoicesCsv, missingNumbers, state: S, kpis: () => kpis(rangeFor(S.period)),
     api: null   // set by the Firebase module: saveProduct(p), deleteProduct(name)
   };
 })();
@@ -1352,8 +1388,8 @@
   }
 
   async function loadAll() {
-    const [inv, prod, users, tg] = await Promise.all([getDocs(col('invoices')), getDocs(col('products')), getDocs(collection(db, 'users')), getDoc(doc(col('settings'), 'targets')).catch(() => null)]);
-    Dash.setData(inv.docs.map(d => d.data()), prod.docs.map(d => d.data()), users.docs.map(d => Object.assign({ email: d.id }, d.data())), { isPreview: IS_PREVIEW, me, settings: { targets: (tg && tg.exists()) ? tg.data() : {} } });
+    const [inv, prod, users, tg, ctr] = await Promise.all([getDocs(col('invoices')), getDocs(col('products')), getDocs(collection(db, 'users')), getDoc(doc(col('settings'), 'targets')).catch(() => null), getDoc(COUNTER_REF).catch(() => null)]);
+    Dash.setData(inv.docs.map(d => d.data()), prod.docs.map(d => d.data()), users.docs.map(d => Object.assign({ email: d.id }, d.data())), { isPreview: IS_PREVIEW, me, lastNumber: (ctr && ctr.exists()) ? ctr.data().lastNumber : 0, settings: { targets: (tg && tg.exists()) ? tg.data() : {} } });
   }
 
   onAuthStateChanged(auth, async (user) => {
