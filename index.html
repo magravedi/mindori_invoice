@@ -2209,6 +2209,38 @@
         });
         calculate();
     }
+    // A number is reserved ONCE per invoice on screen. If a save or download then
+    // fails (or the PDF step errors), retrying reuses that same number and
+    // overwrites the same record, so a retry can never create a second entry or
+    // leave a gap in the numbering.
+    let reservedInvoiceId = '';
+    let reserving = null;
+    function reserveInvoiceNumber() {
+        if (reservedInvoiceId) {
+            formattedInvoiceID = reservedInvoiceId;
+            document.getElementById('displayInvoiceNum').innerText = reservedInvoiceId;
+            return Promise.resolve();
+        }
+        if (!reserving) {
+            reserving = (async () => {
+                if (typeof window.claimNextInvoiceNumber !== 'function') {
+                    throw new Error("Counter service not ready. Please refresh and try again.");
+                }
+                currentInvoiceNum = await window.claimNextInvoiceNumber();
+                formattedInvoiceID = "MIN-" + currentInvoiceNum.toString().padStart(7, '0');
+                document.getElementById('displayInvoiceNum').innerText = formattedInvoiceID;
+                reservedInvoiceId = formattedInvoiceID;
+            })().finally(() => { reserving = null; });
+        }
+        return reserving;
+    }
+    // Lock every action that could record this invoice while one is running.
+    function setInvoiceButtonsBusy(busy) {
+        ['dl-button', 'save-button', 'save-advance-button', 'finalize-button'].forEach(id => {
+            const b = document.getElementById(id);
+            if (b) b.disabled = busy;
+        });
+    }
     async function saveOnly() {
         const btn = document.getElementById('save-button');
         const dlBtn = document.getElementById('dl-button');
@@ -2228,14 +2260,9 @@
             formattedInvoiceID = document.getElementById('displayInvoiceNum').innerText;
         } else {
             btn.innerText = "RESERVING NUMBER…";
-            // Atomically claim the next invoice number from Firestore
+            // Atomically claim the next invoice number from Firestore (once)
             try {
-                if (typeof window.claimNextInvoiceNumber !== 'function') {
-                    throw new Error("Counter service not ready. Please refresh and try again.");
-                }
-                currentInvoiceNum = await window.claimNextInvoiceNumber();
-                formattedInvoiceID = "MIN-" + currentInvoiceNum.toString().padStart(7, '0');
-                document.getElementById('displayInvoiceNum').innerText = formattedInvoiceID;
+                await reserveInvoiceNumber();
             } catch (e) {
                 console.error("Failed to claim invoice number:", e);
                 alert("Could not reserve invoice number. Check your connection and try again.");
@@ -2344,6 +2371,7 @@
     }
 
     function reprintInvoice(inv) {
+        reservedInvoiceId = '';
         // Repopulate the form fields from the saved invoice
         document.getElementById('displayInvoiceNum').innerText = inv.invoiceID || '';
         document.getElementById('custName').value = inv.customerName || '';
@@ -2488,6 +2516,7 @@
 
     // Enter advance-creation mode: fresh form, advance toggle on, reserved number preview
     function startNewAdvance() {
+        reservedInvoiceId = '';
         closeAdvanceModal();
         appMode = 'advanceCreate';
         applyModeUI();
@@ -2572,9 +2601,7 @@
         btn.disabled = true;
         btn.innerText = "RESERVING NUMBER…";
         try {
-            currentInvoiceNum = await window.claimNextInvoiceNumber();
-            formattedInvoiceID = "MIN-" + currentInvoiceNum.toString().padStart(7, '0');
-            document.getElementById('displayInvoiceNum').innerText = formattedInvoiceID;
+            await reserveInvoiceNumber();
         } catch (e) {
             console.error("Claim failed:", e);
             alert("Could not reserve invoice number. Try again.");
@@ -2621,44 +2648,52 @@
     }
 
     async function generatePDF() {
-        console.log("=== Mindori invoice v32 (searchable city) ===");
+        console.log("=== Mindori invoice v33 (download records once) ===");
         const btn = document.getElementById('dl-button');
-        const saveBtn = document.getElementById('save-button');
         const element = document.getElementById('capture-area');
 
-        btn.disabled = true;
-        if (saveBtn) saveBtn.disabled = true;
-        btn.innerText = "RESERVING INVOICE NUMBER…";
+        // Whatever gets a PDF is also recorded — exactly once — except when an
+        // already-saved invoice is merely being re-downloaded:
+        //   new invoice       reserve a number (once) and save the invoice
+        //   advance (create)  reserve a number (once) and save it as an advance
+        //   advance (finalize) complete that advance under its own number
+        //   viewing a saved invoice  PDF only — nothing is written, and the
+        //                            original creator/date are left untouched
+        if (!reprintMode) {
+            if (!invoiceItems.some(it => it.name && it.name.trim() !== "")) {
+                alert("Please add at least one item before downloading.");
+                return;
+            }
+            if (appMode === 'advanceCreate' && (!advanceEnabled || advanceAmount <= 0)) {
+                alert("Please turn on Advance Paid and enter the advance amount received.");
+                return;
+            }
+            if (appMode === 'advanceFinalize' &&
+                !confirm('Downloading will also complete & finalize ' + finalizingAdvanceId + '.\n\nContinue?')) {
+                return;
+            }
+        }
 
-        // Atomically claim the final invoice number from Firestore.
-        // In reprint mode, the number is already set from the saved invoice,
-        // so we skip claiming (no new number) and skip saving (already saved).
-        // In advance modes (create/finalize), the number is handled by the advance
-        // flow (Save Advance / Complete & Finalize), so Download must NOT claim a
-        // new number or write to the main Invoices sheet — it only produces a PDF.
-        const skipClaim = reprintMode || appMode === 'advanceCreate' || appMode === 'advanceFinalize';
-        // Reprint/edit still saves (updating the same invoice in place); the advance
-        // flows save themselves, so Download only produces the PDF there.
-        const skipSave = appMode === 'advanceCreate' || appMode === 'advanceFinalize';
-        if (!skipClaim) {
+        setInvoiceButtonsBusy(true);
+        btn.innerText = "RESERVING INVOICE NUMBER…";
+        const resetButtons = () => {
+            btn.innerText = "DOWNLOAD INVOICE (PDF)";
+            setInvoiceButtonsBusy(false);
+        };
+
+        if (reprintMode || appMode === 'advanceFinalize') {
+            // The invoice already has its number — never claim another.
+            formattedInvoiceID = (appMode === 'advanceFinalize' && finalizingAdvanceId) ||
+                                 document.getElementById('displayInvoiceNum').innerText;
+        } else {
             try {
-                if (typeof window.claimNextInvoiceNumber !== 'function') {
-                    throw new Error("Counter service not ready. Please refresh and try again.");
-                }
-                currentInvoiceNum = await window.claimNextInvoiceNumber();
-                formattedInvoiceID = "MIN-" + currentInvoiceNum.toString().padStart(7, '0');
-                document.getElementById('displayInvoiceNum').innerText = formattedInvoiceID;
+                await reserveInvoiceNumber();
             } catch (e) {
                 console.error("Failed to claim invoice number:", e);
                 alert("Could not reserve invoice number. Check your connection and try again.");
-                btn.disabled = false;
-                if (saveBtn) saveBtn.disabled = false;
-                btn.innerText = "DOWNLOAD INVOICE (PDF)";
+                resetButtons();
                 return;
             }
-        } else {
-            // Reprint / advance: use the invoice ID already shown on the form
-            formattedInvoiceID = document.getElementById('displayInvoiceNum').innerText;
         }
 
         const custNameInput = document.getElementById('custName').value.trim();
@@ -2667,21 +2702,28 @@
         calculate();
         btn.innerText = "SAVING & PREPARING PDF...";
 
-        // If the save fails we still produce the PDF — the customer is
-        // waiting for it — but we warn, and skip the usual auto-reload at the end
-        // so the invoice stays on screen and can be re-saved.
-        let sheetSaveFailed = false;
-        if (!skipSave) {
+        // If recording fails we still produce the PDF — the customer is waiting
+        // for it — but we warn, and keep the invoice on screen. Retrying is safe:
+        // the reserved number is reused, so it is never recorded twice.
+        let saveFailed = false;
+        if (!reprintMode) {
             try {
-                await persistInvoice();
+                if (appMode === 'advanceCreate') {
+                    await window.MindoriDB.saveAdvance(buildInvoicePayload());
+                } else if (appMode === 'advanceFinalize') {
+                    await window.MindoriDB.finalizeAdvance(buildInvoicePayload(), finalizingAdvanceId);
+                } else {
+                    await persistInvoice();
+                }
             } catch (e) {
-                sheetSaveFailed = true;
+                saveFailed = true;
                 console.error("Save Error:", e);
-                alert("The PDF will still download, but saving the invoice failed:\n\n" + e.message +
+                alert("The PDF will still download, but recording the invoice failed:\n\n" + e.message +
                       (e.queued
                         ? "\n\nInvoice " + formattedInvoiceID + " has been queued and will send itself " +
                           "automatically once the connection is back."
-                        : "\n\nInvoice " + formattedInvoiceID + " will stay on screen — tap SAVE INVOICE to retry."));
+                        : "\n\nInvoice " + formattedInvoiceID + " will stay on screen — tap DOWNLOAD again " +
+                          "to retry. It will not be recorded twice."));
             }
         }
 
@@ -2938,26 +2980,23 @@
             // Clean up the off-screen clone
             if (pdfWrapper.parentNode) pdfWrapper.parentNode.removeChild(pdfWrapper);
             setTimeout(() => {
-                // A normal fresh invoice navigates to a blank one (buttons stay
-                // disabled through the reload, so it can't be recorded twice). In
-                // reprint or advance (create/finalize) modes keep the form, mode
-                // and both buttons live so the user can continue.
-                if (!reprintMode && appMode === 'normal' && !sheetSaveFailed) {
+                // A recorded invoice moves on to a blank one — the buttons stay
+                // disabled through the reload, so it can't be recorded twice.
+                // Re-downloading a saved invoice, or a record that failed, keeps
+                // the form on screen.
+                if (!reprintMode && !saveFailed) {
                     reloadFresh();
                     return;
                 }
-                btn.innerText = "DOWNLOAD INVOICE (PDF)";
-                btn.disabled = false;
-                if (saveBtn) saveBtn.disabled = false;
+                resetButtons();
             }, 1200);
         } catch (e) {
             console.error("PDF generation error:", e);
             if (pdfWrapper.parentNode) pdfWrapper.parentNode.removeChild(pdfWrapper);
-            btn.disabled = false;
-            if (saveBtn) saveBtn.disabled = false;
-            btn.innerText = "DOWNLOAD INVOICE (PDF)";
-            reprintMode = false;
-            alert("Error generating PDF. Please try again.");
+            resetButtons();
+            alert("Error generating PDF. Please try again." +
+                  (reprintMode || saveFailed ? "" :
+                   "\n\nInvoice " + formattedInvoiceID + " is already recorded — downloading again will not record it twice."));
         }
     }
 </script>
@@ -3046,6 +3085,8 @@
       const existing = await getDoc(ref);
       data.updatedAt = Date.now();
       if (!existing.exists()) data.createdAt = Date.now();
+      // Re-saving an invoice (an edit, a retry) never changes who created it.
+      else if (existing.data().createdBy) data.createdBy = existing.data().createdBy;
       await setDoc(ref, data, { merge: true });
       listCache_ = { at: 0, data: null };
       return { alreadySaved: existing.exists() };
