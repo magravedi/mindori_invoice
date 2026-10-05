@@ -1148,13 +1148,95 @@
         }
         window.__doTeamLogin();
     };
-    // Fresh page after a save. A full navigation drops any ?reprint=… deep link
-    // (so the same invoice can't reopen) and, because the whole form is thrown
-    // away, a number that was just claimed can never be saved a second time.
-    // ?invoice=1 keeps an admin on the invoice page instead of the dashboard;
-    // it is harmless for staff, who always see the invoice page.
+    // Full page reload to a blank invoice. Kept as the fallback for the in-place
+    // reset below. ?invoice=1 keeps an admin on the invoice page instead of the
+    // dashboard; it is harmless for staff, who always see the invoice page.
     function reloadFresh() {
         location.replace('/?invoice=1');
+    }
+
+    // ------------------------------------------------------------------
+    // Blank invoice WITHOUT reloading the page.
+    // After a save the page used to reload: re-download the app, sign in again,
+    // look up the role and re-read every invoice just to show an empty form,
+    // which is most of the wait staff felt. This puts the form back to exactly
+    // its first-load state in place, instantly, and keeps the database
+    // connection warm for the next invoice. A number that was just used can
+    // never be saved twice because the reservation is cleared here. If anything
+    // unexpected happens it falls back to the old reload.
+    // ------------------------------------------------------------------
+    let initialForm = null;
+    let freshToken = 0;
+    function snapshotInitialForm() {
+        const labels = {};
+        ['save-button', 'dl-button', 'save-advance-button', 'finalize-button'].forEach(id => {
+            const b = document.getElementById(id);
+            if (b) labels[id] = b.textContent;
+        });
+        initialForm = {
+            areaClass: document.getElementById('capture-area').className,
+            labels: labels,
+            fields: Array.from(document.querySelectorAll('#capture-area input[id], #capture-area select[id], #capture-area textarea[id]'))
+                .map(el => ({ el: el, value: el.value, checked: el.checked }))
+        };
+    }
+    function startFreshInvoice() {
+        try {
+            if (!initialForm) throw new Error('form snapshot missing');
+            const usedId = reservedInvoiceId;   // the number this invoice just used, if any
+            // 1) in-memory state, same as a first load
+            invoiceItems = [{ name: "", price: 0, qty: 1, discount: 0 }];
+            currentGrandTotal = 0; currentInvoiceNum = null; formattedInvoiceID = "";
+            discountEnabled = false; flatDiscountEnabled = false; advanceEnabled = false;
+            flatDiscountAmount = 0; advanceAmount = 0;
+            reprintMode = false; appMode = 'normal'; finalizingAdvanceId = '';
+            reservedInvoiceId = ''; reserving = null;
+            // 2) every field and toggle back to its first-load value; date is today
+            initialForm.fields.forEach(f => { f.el.value = f.value; if (f.el.type === 'checkbox') f.el.checked = f.checked; });
+            document.getElementById('capture-area').className = initialForm.areaClass;
+            document.getElementById('invoiceDate').valueAsDate = new Date();
+            // 3) buttons, banners, pop-ups
+            Object.keys(initialForm.labels).forEach(id => {
+                const b = document.getElementById(id);
+                if (b) { b.textContent = initialForm.labels[id]; b.disabled = false; }
+            });
+            ['reprint-banner', 'advance-banner'].forEach(id => { const e = document.getElementById(id); if (e) e.style.display = 'none'; });
+            ['customer-suggest', 'city-suggest'].forEach(id => { const e = document.getElementById(id); if (e) { e.style.display = 'none'; e.innerHTML = ''; } });
+            const pw = document.getElementById('phoneWarn');
+            if (pw) { pw.style.display = 'none'; pw.innerText = ''; }
+            applyModeUI();
+            render();   // rows + totals + print fields + the "often bought with" hint
+            // 4) number preview: almost certainly the one after the number just
+            // used; confirm with the database in the background.
+            const m = /(\d+)\s*$/.exec(usedId || '');
+            if (m && typeof window.setInvoicePreviewNumber === 'function') window.setInvoicePreviewNumber(parseInt(m[1], 10) + 1);
+            else document.getElementById('displayInvoiceNum').innerText = 'Loading…';
+            if (typeof window.peekNextInvoiceNumber === 'function') {
+                const token = ++freshToken;
+                window.peekNextInvoiceNumber().then(n => {
+                    if (token === freshToken && !reservedInvoiceId && !reprintMode && appMode === 'normal') window.setInvoicePreviewNumber(n);
+                }).catch(() => {});
+            }
+            // 5) a ?reprint=… / dashboard-download link must not reopen the old invoice on refresh
+            const q = new URLSearchParams(location.search);
+            if (q.has('reprint') || q.has('dl')) history.replaceState(null, '', '/?invoice=1');
+            window.scrollTo(0, 0);
+        } catch (e) {
+            console.error('Fresh-invoice reset failed, reloading instead:', e);
+            reloadFresh();
+        }
+    }
+    // The customer list behind name suggestions is kept in memory; add an invoice
+    // that was just saved so the same customer is suggested next time, without
+    // re-reading every invoice from the database.
+    let knownInvoices = null;
+    function rememberSavedInvoice(payload) {
+        if (!knownInvoices) return;
+        try {
+            knownInvoices.push(Object.assign({}, payload, { status: 'completed' }));
+            buildCustomerIndex(knownInvoices);
+            buildPairIndex(knownInvoices);
+        } catch (e) { console.error('Could not update suggestions:', e); }
     }
     document.getElementById('invoiceDate').valueAsDate = new Date();
 
@@ -1213,6 +1295,7 @@
         if (inp && !inp.value) inp.value = "Surat";
     }
     populateCities();
+    snapshotInitialForm();   // the blank-invoice reference (after the city/date defaults)
 
     // Searchable city dropdown
     function showCitySuggestions(value) {
@@ -1827,6 +1910,7 @@
         customersLoading = true;
         try {
             const invoices = await window.MindoriDB.listInvoices();
+            knownInvoices = invoices;
             buildCustomerIndex(invoices);
             buildPairIndex(invoices);
         } catch (e) {
@@ -2151,7 +2235,7 @@
         // failed save instead of showing a false "SAVED" — but the payload is
         // parked in the retry queue first, so a numbered invoice is never lost.
         try {
-            await window.MindoriDB.saveInvoice(payload);
+            await window.MindoriDB.saveInvoice(payload, undefined, { isNew: !reprintMode });
         } catch (e) {
             queueSave(payload);
             e.queued = true;
@@ -2295,9 +2379,12 @@
         }
 
         btn.innerText = reprintMode ? "✓ UPDATED" : "✓ SAVED";
-        // Leave both buttons disabled: the page navigates to a fresh invoice, so
-        // there is no window in which a second tap could record the same invoice.
-        setTimeout(() => { reloadFresh(); }, 1200);
+        showToast('✓ ' + formattedInvoiceID + (reprintMode ? ' updated' : ' saved'));
+        if (!reprintMode) rememberSavedInvoice(buildInvoicePayload());
+        // Both buttons stay disabled through this short confirmation, then the form
+        // resets in place (which also clears the reserved number), so there is no
+        // window in which a second tap could record the same invoice.
+        setTimeout(() => { startFreshInvoice(); }, 450);
     }
 
     // ==========================================
@@ -2447,9 +2534,9 @@
     }
 
     function clearReprint() {
-        // Reload the page for a clean, fresh invoice (resets number preview,
-        // clears reprint mode, and restores all defaults).
-        reloadFresh();
+        // Back to a clean, fresh invoice (resets number preview, clears reprint
+        // mode, and restores all defaults) without reloading the page.
+        startFreshInvoice();
     }
 
     // ==========================================
@@ -2553,8 +2640,8 @@
     }
 
     function exitAdvanceMode() {
-        // Reload for a clean slate (clears mode, banners, form)
-        reloadFresh();
+        // Clean slate (clears mode, banners, form) without reloading the page
+        startFreshInvoice();
     }
 
     // Show/hide the right action buttons for the current mode
@@ -2620,7 +2707,7 @@
         }
         btn.innerText = "✓ ADVANCE SAVED";
         showToast('✓ Advance invoice ' + formattedInvoiceID + ' saved');
-        setTimeout(() => { reloadFresh(); }, 1300);
+        setTimeout(() => { startFreshInvoice(); }, 600);
     }
 
     // Finalize an advance: save the finished invoice and mark it completed.
@@ -2644,7 +2731,20 @@
         }
         btn.innerText = "✓ FINALIZED";
         showToast('✓ ' + finalizingAdvanceId + ' completed');
-        setTimeout(() => { reloadFresh(); }, 1400);
+        setTimeout(() => { startFreshInvoice(); }, 600);
+    }
+
+    // Opened from the dashboard's Download button (?reprint=ID&dl=1): the saved
+    // invoice is loaded in view-only reprint mode, so producing its PDF writes
+    // nothing. When the file has been produced, go back to the dashboard.
+    async function autoDownloadInvoice() {
+        try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+        showToast('Preparing the PDF…');
+        const ok = await generatePDF();
+        if (ok) {
+            showToast('✓ ' + formattedInvoiceID + ' downloaded — back to the dashboard');
+            setTimeout(() => { location.replace('/dashboard#invoices'); }, 1800);
+        }
     }
 
     async function generatePDF() {
@@ -2985,11 +3085,14 @@
                 // Re-downloading a saved invoice, or a record that failed, keeps
                 // the form on screen.
                 if (!reprintMode && !saveFailed) {
-                    reloadFresh();
+                    showToast('✓ ' + formattedInvoiceID + ' downloaded');
+                    if (appMode === 'normal') rememberSavedInvoice(buildInvoicePayload());
+                    startFreshInvoice();
                     return;
                 }
                 resetButtons();
-            }, 1200);
+            }, 500);
+            return true;   // the PDF was produced
         } catch (e) {
             console.error("PDF generation error:", e);
             if (pdfWrapper.parentNode) pdfWrapper.parentNode.removeChild(pdfWrapper);
@@ -3078,18 +3181,26 @@
 
     // One document per invoice number. Saving the same number again (editing a
     // past invoice) updates it in place — never a duplicate.
-    async saveInvoice(payload, status) {
+    async saveInvoice(payload, status, opts) {
       const data = normalizeInvoice_(payload, status || 'completed');
       if (!data.invoiceID) throw new Error('Missing invoice number');
       const ref = doc(col('invoices'), data.invoiceID);
-      const existing = await getDoc(ref);
       data.updatedAt = Date.now();
-      if (!existing.exists()) data.createdAt = Date.now();
-      // Re-saving an invoice (an edit, a retry) never changes who created it.
-      else if (existing.data().createdBy) data.createdBy = existing.data().createdBy;
+      let existed = false;
+      if (opts && opts.isNew) {
+        // A number reserved a moment ago has no record yet, so skip the extra
+        // round trip to the database.
+        data.createdAt = Date.now();
+      } else {
+        const existing = await getDoc(ref);
+        existed = existing.exists();
+        if (!existed) data.createdAt = Date.now();
+        // Re-saving an invoice (an edit, a retry) never changes who created it.
+        else if (existing.data().createdBy) data.createdBy = existing.data().createdBy;
+      }
       await setDoc(ref, data, { merge: true });
       listCache_ = { at: 0, data: null };
-      return { alreadySaved: existing.exists() };
+      return { alreadySaved: existed };
     },
     async getInvoice(id) {
       const snap = await getDoc(doc(col('invoices'), str_(id)));
@@ -3251,7 +3362,13 @@
       const reprintId = params.get('reprint');
       if (reprintId && typeof reprintInvoice === 'function') {
         window.MindoriDB.getInvoice(reprintId)
-          .then(inv => { if (inv) reprintInvoice(inv); else showToast('Invoice ' + reprintId + ' not found'); })
+          .then(inv => {
+            if (inv) {
+              reprintInvoice(inv);
+              // Dashboard "Download": produce the PDF straight away, then go back.
+              if (params.get('dl') === '1' && typeof autoDownloadInvoice === 'function') autoDownloadInvoice();
+            } else showToast('Invoice ' + reprintId + ' not found');
+          })
           .catch(e => console.error('Could not open invoice', reprintId, e));
       }
       // Load the product catalog for autocomplete (non-fatal if it fails)
