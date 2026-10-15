@@ -2134,7 +2134,10 @@
     function fmtPct(d) { return String(Math.round((parseFloat(d) || 0) * 100) / 100); }
     // A rupee amount for a number box: rounded exactly like formatCurrency (what
     // the PDF prints), without the thousands commas. 1,700.00 -> 1700, 874.13 -> 874.13
-    function moneyInputValue(v) { return String(Number(formatCurrency(Number(v) || 0).replace(/,/g, ''))); }
+    function moneyInputValue(v) { return String(roundMoney(v)); }
+    // Rupees rounded to the paisa exactly as the PDF prints them (formatCurrency),
+    // so saved totals match the invoice: 2700.000000000297 -> 2700.
+    function roundMoney(v) { return Number(formatCurrency(Number(v) || 0).replace(/,/g, '')); }
     // Typing the Discounted Price works out the Discount % for that item.
     // The exact % is kept (only the shown % is rounded), so the line total
     // matches the typed price to the paisa: 999 -> 900 keeps 9.909909…%, and
@@ -2157,6 +2160,7 @@
         const item = invoiceItems[index];
         const nIn = document.getElementById(`net-input-${index}`);
         if (!item || !nIn) return;
+        nIn._justFocused = false;   // a Tab-in must not swallow a later click
         const eff = discountEnabled ? item.discount : 0;
         nIn.value = moneyInputValue(item.price * (1 - eff / 100));
     }
@@ -2271,10 +2275,10 @@
             instagramID: document.getElementById('custInsta').value,
             paymentMode: document.getElementById('custPayment').value,
             city: document.getElementById('custCity').value,
-            grandTotal: currentGrandTotal,
+            grandTotal: roundMoney(currentGrandTotal),
             flatDiscount: flatDiscountEnabled ? flatDiscountAmount : 0,
             advancePaid: advanceEnabled ? advanceAmount : 0,
-            balanceDue: advanceEnabled ? Math.max(0, currentGrandTotal - advanceAmount) : currentGrandTotal,
+            balanceDue: roundMoney(advanceEnabled ? Math.max(0, currentGrandTotal - advanceAmount) : currentGrandTotal),
             items: validItems.map(item => ({
                 name: item.name,
                 price: item.price,

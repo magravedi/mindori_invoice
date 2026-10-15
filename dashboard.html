@@ -1073,6 +1073,9 @@
   // Discount % as shown: at most 2 decimals (a % worked out from a typed discounted
   // price can be 9.90990…; the exact value is kept for the maths).
   const fmtPct = (d) => String(Math.round(num(d) * 100) / 100);
+  // Rupees to the paisa (saved totals, CSV): 2700.000000000297 -> 2700.
+  const money2 = (v) => Math.round(num(v) * 100) / 100;
+  const pctCsv = (d) => (d === '' ? '' : fmtPct(d));
   // Same maths as the invoice page: item discounts, then the flat discount, never
   // below zero; balance due = total minus the advance paid.
   function totalsOf(inv) {
@@ -1162,7 +1165,7 @@
     const g = (id) => { const el = $(id); return el ? el.value : ''; };
     E.dateISO = g('e-date'); E.customerName = g('e-name'); E.phone = g('e-phone'); E.instagramID = g('e-insta'); E.city = g('e-city'); E.source = g('e-source'); E.paymentMode = g('e-pay'); E.birthISO = g('e-bday');
     E.flatDiscount = num(g('e-flat')); E.advancePaid = num(g('e-adv'));
-    document.querySelectorAll('#inv-drawer tr[data-row]').forEach(tr => { const i = +tr.dataset.row; if (!E.items[i]) return; E.items[i].name = tr.querySelector('.name').value; E.items[i].price = num(tr.querySelector('.price').value); E.items[i].qty = num(tr.querySelector('.qty').value) || 1; const dIn = tr.querySelector('.disc'); if (dIn.value !== dIn.dataset.shown) E.items[i].discount = num(dIn.value); });
+    document.querySelectorAll('#inv-drawer tr[data-row]').forEach(tr => { const i = +tr.dataset.row; if (!E.items[i]) return; E.items[i].name = tr.querySelector('.name').value; E.items[i].price = num(tr.querySelector('.price').value); E.items[i].qty = num(tr.querySelector('.qty').value) || 1; const dIn = tr.querySelector('.disc'); E.items[i].discount = (dIn.value === dIn.dataset.shown) ? num(dIn.dataset.orig) : num(dIn.value); });
   }
   const totalsHtml = (t, inv) => '<div><span>Subtotal</span><span>' + fmtINR(t.subtotal) + '</span></div>' + (t.itemDiscount > 0.005 ? '<div><span>Item discounts</span><span>− ' + fmtINR(t.itemDiscount) + '</span></div>' : '') + (num(inv.flatDiscount) ? '<div><span>Flat discount</span><span>− ' + fmtINR(inv.flatDiscount) + '</span></div>' : '') + '<div class="gt"><span>Grand total</span><span>' + fmtINR(t.grandTotal) + '</span></div>' + (num(inv.advancePaid) ? '<div><span>Advance paid</span><span>' + fmtINR(inv.advancePaid) + '</span></div><div><span>Balance due</span><span>' + fmtINR(t.balanceDue) + '</span></div>' : '');
   function updateEditTotals() {
@@ -1193,7 +1196,7 @@
       '<datalist id="dl-src">' + opts(sources) + '</datalist><datalist id="dl-pay">' + opts(pays) + '</datalist><datalist id="dl-prod">' + opts(prodNames) + '</datalist>' +
       '<div class="fgrid">' + [['Date', '<input class="search" type="date" id="e-date" value="' + esc(E.dateISO) + '">'], ['Customer', '<input class="search" id="e-name" value="' + esc(E.customerName) + '">'], ['Phone', '<input class="search" id="e-phone" value="' + esc(E.phone) + '">'], ['Instagram', '<input class="search" id="e-insta" value="' + esc(E.instagramID) + '">'], ['City', '<input class="search" id="e-city" value="' + esc(E.city) + '">'], ['Source', '<input class="search" id="e-source" list="dl-src" value="' + esc(E.source) + '">'], ['Payment', '<input class="search" id="e-pay" list="dl-pay" value="' + esc(E.paymentMode) + '">'], ['Birthday', '<input class="search" type="date" id="e-bday" value="' + esc(E.birthISO || '') + '">']].map(([k, h]) => '<div><label>' + k + '</label>' + h + '</div>').join('') + '</div>' +
       '<h4>Items</h4><div class="tbl-wrap"><table class="items-tbl"><thead><tr><th>Item</th><th class="num">Price</th><th class="num">Qty</th><th class="num">Disc %</th><th class="num">Line</th><th></th></tr></thead><tbody>' +
-      E.items.map((it, i) => '<tr data-row="' + i + '"><td><input class="search name" list="dl-prod" value="' + esc(it.name) + '" placeholder="Item"></td><td class="num"><input class="search price" type="number" min="0" step="1" value="' + it.price + '"></td><td class="num"><input class="search qty" type="number" min="1" step="1" value="' + it.qty + '"></td><td class="num"><input class="search disc" type="number" min="0" max="100" step="any" value="' + fmtPct(it.discount) + '" data-shown="' + fmtPct(it.discount) + '"></td><td class="num" data-line="' + i + '">' + fmtINR(lineTotal(it)) + '</td><td><button class="btn danger sm" data-row-del="' + i + '" title="Remove line">✕</button></td></tr>').join('') +
+      E.items.map((it, i) => '<tr data-row="' + i + '"><td><input class="search name" list="dl-prod" value="' + esc(it.name) + '" placeholder="Item"></td><td class="num"><input class="search price" type="number" min="0" step="1" value="' + it.price + '"></td><td class="num"><input class="search qty" type="number" min="1" step="1" value="' + it.qty + '"></td><td class="num"><input class="search disc" type="number" min="0" max="100" step="any" value="' + fmtPct(it.discount) + '" data-shown="' + fmtPct(it.discount) + '" data-orig="' + num(it.discount) + '"></td><td class="num" data-line="' + i + '">' + fmtINR(lineTotal(it)) + '</td><td><button class="btn danger sm" data-row-del="' + i + '" title="Remove line">✕</button></td></tr>').join('') +
       '</tbody></table></div><div class="row" style="margin-top:8px"><button class="btn subtle sm" id="e-add-row">＋ Add item</button></div>' +
       '<div class="fgrid" style="margin-top:12px"><div><label>Flat discount (₹)</label><input class="search" type="number" min="0" step="1" id="e-flat" value="' + num(E.flatDiscount) + '"></div><div><label>Advance paid (₹)</label><input class="search" type="number" min="0" step="1" id="e-adv" value="' + num(E.advancePaid) + '"></div></div>' +
       '<div class="totals" id="e-totals"></div>' +
@@ -1206,7 +1209,7 @@
     if (!items.length) throw new Error('An invoice needs at least one item with a name.');
     const t = totalsOf(Object.assign({}, E, { items }));
     const dmy = (iso) => iso ? (iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4)) : '';
-    return Object.assign({}, orig, { customerName: str(E.customerName), phone: str(E.phone), instagramID: str(E.instagramID), city: str(E.city), source: str(E.source), paymentMode: str(E.paymentMode), birthDate: dmy(E.birthISO), date: dmy(E.dateISO) || orig.date, dateISO: E.dateISO || orig.dateISO, items, flatDiscount: num(E.flatDiscount), advancePaid: num(E.advancePaid), grandTotal: t.grandTotal, balanceDue: t.balanceDue });
+    return Object.assign({}, orig, { customerName: str(E.customerName), phone: str(E.phone), instagramID: str(E.instagramID), city: str(E.city), source: str(E.source), paymentMode: str(E.paymentMode), birthDate: dmy(E.birthISO), date: dmy(E.dateISO) || orig.date, dateISO: E.dateISO || orig.dateISO, items, flatDiscount: num(E.flatDiscount), advancePaid: num(E.advancePaid), grandTotal: money2(t.grandTotal), balanceDue: money2(t.balanceDue) });
   }
   async function invAction(fn, okMsg, closeAfter) {
     const st = $('inv-status-msg'); st.textContent = 'Working…';
@@ -1216,7 +1219,7 @@
     const trashMode = S.invView === 'trash';
     const H = ['Invoice ID','Created By','Date','Customer Name','Phone','Birth Date','Source','Instagram ID','Mode Of Payment','City','Item','Price','Qty','Disc %','Flat Discount','Grand Total','Advance Paid','Balance Due','Status'].concat(trashMode ? ['Deleted At'] : []);
     const lines = [H.join(',')];
-    invoicesFiltered().forEach(i => { const items = i.items.length ? i.items : [{ name: '', price: '', qty: '', discount: '' }]; items.forEach((it, idx) => { const last = idx === items.length - 1; lines.push([i.invoiceID, i.createdBy, i.date, i.customerName, i.phone, i.birthDate, i.source, i.instagramID, i.paymentMode, i.city, it.name, it.price, it.qty, it.discount, last ? i.flatDiscount : 0, last ? i.grandTotal : 0, last ? i.advancePaid : 0, last ? i.balanceDue : 0, i.status === 'pending' ? 'Pending' : 'Completed'].concat(trashMode ? [i.deletedAt ? new Date(i.deletedAt).toISOString().slice(0, 10) : ''] : []).map(csvq).join(',')); }); });
+    invoicesFiltered().forEach(i => { const items = i.items.length ? i.items : [{ name: '', price: '', qty: '', discount: '' }]; items.forEach((it, idx) => { const last = idx === items.length - 1; lines.push([i.invoiceID, i.createdBy, i.date, i.customerName, i.phone, i.birthDate, i.source, i.instagramID, i.paymentMode, i.city, it.name, it.price, it.qty, pctCsv(it.discount), last ? money2(i.flatDiscount) : 0, last ? money2(i.grandTotal) : 0, last ? money2(i.advancePaid) : 0, last ? money2(i.balanceDue) : 0, i.status === 'pending' ? 'Pending' : 'Completed'].concat(trashMode ? [i.deletedAt ? new Date(i.deletedAt).toISOString().slice(0, 10) : ''] : []).map(csvq).join(',')); }); });
     return lines.join('\n');
   }
 
@@ -1325,7 +1328,7 @@
     const lines = [H.join(',')];
     S.invoices.slice().sort((a, b) => a.number - b.number).forEach(i => {
       const items = i.items.length ? i.items : [{ name: '', price: '', qty: '', discount: '' }];
-      items.forEach((it, idx) => { const last = idx === items.length - 1; lines.push([i.invoiceID, i.createdBy, i.date, i.customerName, i.phone, i.birthDate, i.source, i.instagramID, i.paymentMode, i.city, it.name, it.price, it.qty, it.discount, last ? i.flatDiscount : 0, last ? i.grandTotal : 0, last ? i.advancePaid : 0, last ? i.balanceDue : 0, i.status === 'pending' ? 'Pending' : 'Completed'].map(q).join(',')); });
+      items.forEach((it, idx) => { const last = idx === items.length - 1; lines.push([i.invoiceID, i.createdBy, i.date, i.customerName, i.phone, i.birthDate, i.source, i.instagramID, i.paymentMode, i.city, it.name, it.price, it.qty, pctCsv(it.discount), last ? money2(i.flatDiscount) : 0, last ? money2(i.grandTotal) : 0, last ? money2(i.advancePaid) : 0, last ? money2(i.balanceDue) : 0, i.status === 'pending' ? 'Pending' : 'Completed'].map(q).join(',')); });
     });
     return lines.join('\n');
   }
