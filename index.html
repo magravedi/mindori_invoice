@@ -348,17 +348,20 @@
             text-transform: uppercase;
             letter-spacing: 1px;
         }
-        /* Column widths (default — discount visible) */
-        .col-desc { width: 45%; }
-        .col-price { width: 15%; }
-        .col-qty { width: 10%; }
-        .col-discount { width: 15%; }
-        .col-total { width: 15%; }
-        /* Column widths when discount is disabled */
+        /* Column widths (default — discount visible):
+           Item | Price | Discount % | Discounted Price | Qty | Total */
+        .col-desc { width: 30%; }
+        .col-price { width: 14%; }
+        .col-discount { width: 12%; }
+        .col-net { width: 15%; }
+        .col-qty { width: 11%; }
+        .col-total { width: 18%; }
+        /* Column widths when discount is disabled (Discount % and Discounted Price hidden) */
         #capture-area.no-discount .col-desc { width: 50%; }
         #capture-area.no-discount .col-price { width: 17%; }
         #capture-area.no-discount .col-qty { width: 13%; }
         #capture-area.no-discount .col-discount { display: none !important; }
+        #capture-area.no-discount .col-net { display: none !important; }
         #capture-area.no-discount .col-total { width: 20%; }
         #capture-area.no-discount #discountSummaryRow { display: none !important; }
 
@@ -515,6 +518,9 @@
         }
         .delete-btn { color: #ef4444; cursor: pointer; font-weight: bold; font-size: 22px; line-height: 1; padding: 6px 8px; user-select: none; }
         .show-on-print { display: none; }
+        /* Discounted price per piece: read-only, worked out from Price and Discount % */
+        .net-price { display: inline-block; padding-top: 6px; font-size: 13px; font-weight: 600; color: var(--text-dark); white-space: nowrap; }
+        .pdf-mode .net-price { padding-top: 0 !important; font-size: 14px !important; font-weight: 600 !important; color: var(--text-dark) !important; font-family: Arial, sans-serif !important; }
         /* "Often bought with…" chips under the items table */
         .upsell { font-size: 12px; color: var(--text-muted); margin: 4px 0 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
         .upsell-chip { border: 1px solid var(--border); background: #f8fafc; border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: var(--text-dark); font-family: inherit; }
@@ -764,6 +770,16 @@
 
             /* Hide discount cell entirely when toggle is off */
             #capture-area.no-discount .col-discount { display: none !important; }
+            #capture-area.no-discount .col-net { display: none !important; }
+            /* Discounted price on phones: a read-only box lined up with the inputs */
+            tbody td .net-price {
+                flex: 1 1 auto;
+                padding: 10px 12px;
+                font-size: 16px;
+                background: #eef4f6;
+                border-radius: 4px;
+                box-sizing: border-box;
+            }
 
             /* Actions bar */
             .actions-bar {
@@ -1051,8 +1067,9 @@
             <tr>
                 <th class="col-desc">Item Description</th>
                 <th class="col-price">Price</th>
-                <th class="col-qty">Qty</th>
                 <th class="col-discount">Discount %</th>
+                <th class="col-net">Discounted Price</th>
+                <th class="col-qty">Qty</th>
                 <th class="col-total" style="text-align: right;">Total</th>
             </tr>
         </thead>
@@ -2156,6 +2173,8 @@
             if (discountEnabled && item.discount > 0) anyDiscountApplied = true;
             const display = document.getElementById(`row-total-${i}`);
             if(display) display.innerText = `₹${formatCurrency(rowFinal)}`;
+            const pNet = document.getElementById(`row-net-${i}`);
+            if(pNet) pNet.innerText = `₹${formatCurrency(item.price * (1 - effectiveDiscount / 100))}`;
             const pPrice = document.getElementById(`print-price-${i}`);
             const pQty = document.getElementById(`print-qty-${i}`);
             const pDisc = document.getElementById(`print-disc-${i}`);
@@ -2253,6 +2272,7 @@
         invoiceItems.forEach((item, i) => {
             const effectiveDiscount = discountEnabled ? item.discount : 0;
             const rowTotal = (item.price * item.qty) * (1 - (effectiveDiscount / 100));
+            const netPrice = item.price * (1 - (effectiveDiscount / 100));   // per piece, after the discount
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td class="col-desc">
@@ -2272,18 +2292,21 @@
                     </div>
                     <span class="show-on-print" id="print-price-${i}">₹${formatCurrency(item.price)}</span>
                 </td>
-                <td class="col-qty" data-label="Qty">
-                    <div class="box-input hide-on-print" style="padding: 5px 2px;">
-                        <input type="number" inputmode="numeric" class="qty-input" value="${item.qty}" oninput="updateData(${i}, 'qty', this.value)">
-                    </div>
-                    <span class="show-on-print" id="print-qty-${i}">${item.qty}</span>
-                </td>
                 <td class="col-discount" data-label="Discount %">
                     <div class="box-input hide-on-print">
                         <input type="number" inputmode="decimal" value="${item.discount}" oninput="updateData(${i}, 'discount', this.value)">
                         <span style="font-size:10px; color:var(--text-muted)">%</span>
                     </div>
                     <span class="show-on-print" id="print-disc-${i}">${item.discount}%</span>
+                </td>
+                <td class="col-net" data-label="Discounted Price">
+                    <span class="net-price" id="row-net-${i}">₹${formatCurrency(netPrice)}</span>
+                </td>
+                <td class="col-qty" data-label="Qty">
+                    <div class="box-input hide-on-print" style="padding: 5px 2px;">
+                        <input type="number" inputmode="numeric" class="qty-input" value="${item.qty}" oninput="updateData(${i}, 'qty', this.value)">
+                    </div>
+                    <span class="show-on-print" id="print-qty-${i}">${item.qty}</span>
                 </td>
                 <td class="col-total" style="text-align: right; font-weight: 700; padding-top: 15px;" id="row-total-${i}">₹${formatCurrency(rowTotal)}</td>
             `;
