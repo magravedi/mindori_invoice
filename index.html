@@ -348,19 +348,30 @@
             text-transform: uppercase;
             letter-spacing: 1px;
         }
-        /* Column widths (default — discount visible) */
-        .col-desc { width: 45%; }
-        .col-price { width: 15%; }
-        .col-qty { width: 10%; }
+        /* Column widths (default — discount visible):
+           Item | Price | Discount % | Discounted Price | Qty | Total */
+        .col-desc { width: 27%; }
+        .col-price { width: 14%; }
         .col-discount { width: 15%; }
-        .col-total { width: 15%; }
-        /* Column widths when discount is disabled */
+        .col-net { width: 15%; }
+        .col-qty { width: 11%; }
+        .col-total { width: 18%; }
+        /* Column widths when discount is disabled (Discount % and Discounted Price hidden) */
         #capture-area.no-discount .col-desc { width: 50%; }
         #capture-area.no-discount .col-price { width: 17%; }
         #capture-area.no-discount .col-qty { width: 13%; }
         #capture-area.no-discount .col-discount { display: none !important; }
+        #capture-area.no-discount .col-net { display: none !important; }
         #capture-area.no-discount .col-total { width: 20%; }
         #capture-area.no-discount #discountSummaryRow { display: none !important; }
+        /* Desktop screen only (not phones, not the PDF): slimmer side padding in the
+           number columns so six-digit amounts like 1,25,000 fit inside their boxes. */
+        @media (min-width: 641px) {
+            #capture-area:not(.pdf-mode) .col-price, #capture-area:not(.pdf-mode) .col-discount,
+            #capture-area:not(.pdf-mode) .col-net, #capture-area:not(.pdf-mode) .col-qty { padding-left: 6px; padding-right: 6px; }
+            #capture-area:not(.pdf-mode) .col-price .box-input, #capture-area:not(.pdf-mode) .col-discount .box-input,
+            #capture-area:not(.pdf-mode) .col-net .box-input { padding-left: 6px; padding-right: 6px; }
+        }
 
         /* Flat discount row hidden unless the flat-discount toggle is on */
         #flatDiscountRow { display: none; }
@@ -764,6 +775,7 @@
 
             /* Hide discount cell entirely when toggle is off */
             #capture-area.no-discount .col-discount { display: none !important; }
+            #capture-area.no-discount .col-net { display: none !important; }
 
             /* Actions bar */
             .actions-bar {
@@ -1051,8 +1063,9 @@
             <tr>
                 <th class="col-desc">Item Description</th>
                 <th class="col-price">Price</th>
-                <th class="col-qty">Qty</th>
                 <th class="col-discount">Discount %</th>
+                <th class="col-net">Discounted Price</th>
+                <th class="col-qty">Qty</th>
                 <th class="col-total" style="text-align: right;">Total</th>
             </tr>
         </thead>
@@ -2116,6 +2129,52 @@
         return el.value;
     }
 
+    // Discount % as shown to people: at most 2 decimals, no trailing zeros
+    // (9.90990… -> 9.91, 15 -> 15). The exact value is kept for the maths.
+    function fmtPct(d) { return String(Math.round((parseFloat(d) || 0) * 100) / 100); }
+    // A rupee amount for a number box: rounded exactly like formatCurrency (what
+    // the PDF prints), without the thousands commas. 1,700.00 -> 1700, 874.13 -> 874.13
+    function moneyInputValue(v) { return String(roundMoney(v)); }
+    // Rupees rounded to the paisa exactly as the PDF prints them (formatCurrency),
+    // so saved totals match the invoice: 2700.000000000297 -> 2700.
+    function roundMoney(v) { return Number(formatCurrency(Number(v) || 0).replace(/,/g, '')); }
+    // Typing the Discounted Price works out the Discount % for that item.
+    // The exact % is kept (only the shown % is rounded), so the line total
+    // matches the typed price to the paisa: 999 -> 900 keeps 9.909909…%, and
+    // shows 9.91%. Kept between 0% and 100%.
+    function updateNetPrice(index, val) {
+        const item = invoiceItems[index];
+        if (!item || String(val).trim() === '') return;   // still typing
+        const net = parseFloat(val);
+        if (isNaN(net) || !(item.price > 0)) return;      // needs a Price first
+        let d = (1 - net / item.price) * 100;
+        d = Math.min(100, Math.max(0, d));
+        item.discount = Math.round(d * 1e10) / 1e10;      // drops floating-point noise only
+        const dIn = document.getElementById(`disc-input-${index}`);
+        if (dIn) dIn.value = fmtPct(item.discount);
+        calculate();
+    }
+    // When the Discounted Price box is left, show the price actually used (e.g.
+    // after clearing it, or typing more than the Price, which means 0% discount).
+    function syncNetInput(index) {
+        const item = invoiceItems[index];
+        const nIn = document.getElementById(`net-input-${index}`);
+        if (!item || !nIn) return;
+        nIn._justFocused = false;   // a Tab-in must not swallow a later click
+        const eff = discountEnabled ? item.discount : 0;
+        nIn.value = moneyInputValue(item.price * (1 - eff / 100));
+    }
+    // Select the whole amount on focus so typing replaces it. A tap/click would
+    // normally drop a cursor where the finger landed (the mouse-up after focus
+    // undoes the selection), so that first mouse-up is ignored.
+    function selectAllSoon(el) {
+        el._justFocused = true;
+        try { el.select(); } catch (e) {}
+        setTimeout(() => { try { el.select(); } catch (e) {} }, 0);
+    }
+    function keepSelection(ev, el) {
+        if (el._justFocused) { ev.preventDefault(); el._justFocused = false; try { el.select(); } catch (e) {} }
+    }
     function updateData(index, field, val) {
         if (field === 'name') {
             invoiceItems[index].name = val;
@@ -2156,12 +2215,17 @@
             if (discountEnabled && item.discount > 0) anyDiscountApplied = true;
             const display = document.getElementById(`row-total-${i}`);
             if(display) display.innerText = `₹${formatCurrency(rowFinal)}`;
+            const netNow = item.price * (1 - effectiveDiscount / 100);
+            const pNet = document.getElementById(`print-net-${i}`);
+            if(pNet) pNet.innerText = `₹${formatCurrency(netNow)}`;
+            const nIn = document.getElementById(`net-input-${i}`);
+            if(nIn && document.activeElement !== nIn) nIn.value = moneyInputValue(netNow);   // never while it is being typed in
             const pPrice = document.getElementById(`print-price-${i}`);
             const pQty = document.getElementById(`print-qty-${i}`);
             const pDisc = document.getElementById(`print-disc-${i}`);
             if(pPrice) pPrice.innerText = `₹${formatCurrency(item.price)}`;
             if(pQty) pQty.innerText = item.qty;
-            if(pDisc) pDisc.innerText = `${item.discount}%`;
+            if(pDisc) pDisc.innerText = `${fmtPct(item.discount)}%`;
         });
         currentGrandTotal = subtotal - totalDisc;
         // Apply flat discount (only when its toggle is on)
@@ -2211,10 +2275,10 @@
             instagramID: document.getElementById('custInsta').value,
             paymentMode: document.getElementById('custPayment').value,
             city: document.getElementById('custCity').value,
-            grandTotal: currentGrandTotal,
+            grandTotal: roundMoney(currentGrandTotal),
             flatDiscount: flatDiscountEnabled ? flatDiscountAmount : 0,
             advancePaid: advanceEnabled ? advanceAmount : 0,
-            balanceDue: advanceEnabled ? Math.max(0, currentGrandTotal - advanceAmount) : currentGrandTotal,
+            balanceDue: roundMoney(advanceEnabled ? Math.max(0, currentGrandTotal - advanceAmount) : currentGrandTotal),
             items: validItems.map(item => ({
                 name: item.name,
                 price: item.price,
@@ -2253,6 +2317,7 @@
         invoiceItems.forEach((item, i) => {
             const effectiveDiscount = discountEnabled ? item.discount : 0;
             const rowTotal = (item.price * item.qty) * (1 - (effectiveDiscount / 100));
+            const netPrice = item.price * (1 - (effectiveDiscount / 100));   // per piece, after the discount
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td class="col-desc">
@@ -2272,18 +2337,25 @@
                     </div>
                     <span class="show-on-print" id="print-price-${i}">₹${formatCurrency(item.price)}</span>
                 </td>
+                <td class="col-discount" data-label="Discount %">
+                    <div class="box-input hide-on-print">
+                        <input type="number" inputmode="decimal" id="disc-input-${i}" value="${fmtPct(item.discount)}" oninput="updateData(${i}, 'discount', this.value)">
+                        <span style="font-size:10px; color:var(--text-muted)">%</span>
+                    </div>
+                    <span class="show-on-print" id="print-disc-${i}">${fmtPct(item.discount)}%</span>
+                </td>
+                <td class="col-net" data-label="Discounted Price">
+                    <div class="box-input hide-on-print">
+                        <span style="font-size:10px; color:var(--text-muted)">₹</span>
+                        <input type="number" inputmode="decimal" id="net-input-${i}" placeholder="0" value="${moneyInputValue(netPrice)}" onfocus="selectAllSoon(this)" onmouseup="keepSelection(event, this)" oninput="updateNetPrice(${i}, this.value)" onblur="syncNetInput(${i})">
+                    </div>
+                    <span class="show-on-print" id="print-net-${i}">₹${formatCurrency(netPrice)}</span>
+                </td>
                 <td class="col-qty" data-label="Qty">
                     <div class="box-input hide-on-print" style="padding: 5px 2px;">
                         <input type="number" inputmode="numeric" class="qty-input" value="${item.qty}" oninput="updateData(${i}, 'qty', this.value)">
                     </div>
                     <span class="show-on-print" id="print-qty-${i}">${item.qty}</span>
-                </td>
-                <td class="col-discount" data-label="Discount %">
-                    <div class="box-input hide-on-print">
-                        <input type="number" inputmode="decimal" value="${item.discount}" oninput="updateData(${i}, 'discount', this.value)">
-                        <span style="font-size:10px; color:var(--text-muted)">%</span>
-                    </div>
-                    <span class="show-on-print" id="print-disc-${i}">${item.discount}%</span>
                 </td>
                 <td class="col-total" style="text-align: right; font-weight: 700; padding-top: 15px;" id="row-total-${i}">₹${formatCurrency(rowTotal)}</td>
             `;
