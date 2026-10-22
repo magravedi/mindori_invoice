@@ -27,3 +27,7 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: mindori-invoices
           expires: 30d
+          # Pinned: 15.34.1+ also asks Google for serviceusage.services.get, which
+          # the deploy service account doesn't have (403). Unpin once that account
+          # has the "Service Usage Consumer" role.
+          firebaseToolsVersion: 15.34.0
