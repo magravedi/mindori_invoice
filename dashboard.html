@@ -1068,7 +1068,7 @@
   // ==================== INVOICES TAB ====================
   // Sources offered in the invoice page's dropdown and the edit drawer; the
   // invoices filter lists these plus any other source seen on real invoices.
-  const STD_SOURCES = ['Walk-In', 'Instagram', 'WhatsApp', 'Aayushi', 'Siddhant', 'Manan', 'Gifting', 'Referral', 'Website', 'WorkSpaceCo.'];
+  const STD_SOURCES = ['Walk-In', 'Instagram', 'WhatsApp', 'Aayushi', 'Siddhant', 'Manan', 'Gifting', 'Referral', 'Website', 'WorkSpaceCo.', 'Kaksha'];
   const lineTotal = (it) => it.price * it.qty * (1 - it.discount / 100);
   // Discount % as shown: at most 2 decimals (a % worked out from a typed discounted
   // price can be 9.90990…; the exact value is kept for the maths).
@@ -1189,12 +1189,15 @@
       return;
     }
     const opts = (vals) => vals.map(v => '<option value="' + esc(v) + '">').join('');
-    const sources = Array.from(new Set(STD_SOURCES.concat(S.invoices.map(i => i.source)).filter(Boolean)));
+    // A dropdown, not a datalist: a datalist filters by what is already typed,
+    // so an invoice set to Walk-In only ever offered Walk-In.
+    const sources = Array.from(new Set(STD_SOURCES.concat(S.invoices.map(i => i.source), [E.source]).filter(Boolean)));
+    const srcSelect = '<select class="search" id="e-source">' + (E.source ? '' : '<option value="" selected>—</option>') + sources.map(v => '<option value="' + esc(v) + '"' + (v === E.source ? ' selected' : '') + '>' + esc(v) + '</option>').join('') + '</select>';
     const pays = Array.from(new Set(['Cash', 'Google Pay', 'UPI', 'Card', 'Both'].concat(S.invoices.map(i => i.paymentMode)).filter(Boolean)));
     const prodNames = S.products.map(pr => str(pr.name)).filter(Boolean).sort();
     d.innerHTML = '<button class="close-x" id="inv-drawer-close" aria-label="Close">✕</button><h2>Edit ' + esc(E.invoiceID) + '</h2><div class="sub">Saves to this same invoice number — nothing is duplicated.</div>' +
-      '<datalist id="dl-src">' + opts(sources) + '</datalist><datalist id="dl-pay">' + opts(pays) + '</datalist><datalist id="dl-prod">' + opts(prodNames) + '</datalist>' +
-      '<div class="fgrid">' + [['Date', '<input class="search" type="date" id="e-date" value="' + esc(E.dateISO) + '">'], ['Customer', '<input class="search" id="e-name" value="' + esc(E.customerName) + '">'], ['Phone', '<input class="search" id="e-phone" value="' + esc(E.phone) + '">'], ['Instagram', '<input class="search" id="e-insta" value="' + esc(E.instagramID) + '">'], ['City', '<input class="search" id="e-city" value="' + esc(E.city) + '">'], ['Source', '<input class="search" id="e-source" list="dl-src" value="' + esc(E.source) + '">'], ['Payment', '<input class="search" id="e-pay" list="dl-pay" value="' + esc(E.paymentMode) + '">'], ['Birthday', '<input class="search" type="date" id="e-bday" value="' + esc(E.birthISO || '') + '">']].map(([k, h]) => '<div><label>' + k + '</label>' + h + '</div>').join('') + '</div>' +
+      '<datalist id="dl-pay">' + opts(pays) + '</datalist><datalist id="dl-prod">' + opts(prodNames) + '</datalist>' +
+      '<div class="fgrid">' + [['Date', '<input class="search" type="date" id="e-date" value="' + esc(E.dateISO) + '">'], ['Customer', '<input class="search" id="e-name" value="' + esc(E.customerName) + '">'], ['Phone', '<input class="search" id="e-phone" value="' + esc(E.phone) + '">'], ['Instagram', '<input class="search" id="e-insta" value="' + esc(E.instagramID) + '">'], ['City', '<input class="search" id="e-city" value="' + esc(E.city) + '">'], ['Source', srcSelect], ['Payment', '<input class="search" id="e-pay" list="dl-pay" value="' + esc(E.paymentMode) + '">'], ['Birthday', '<input class="search" type="date" id="e-bday" value="' + esc(E.birthISO || '') + '">']].map(([k, h]) => '<div><label>' + k + '</label>' + h + '</div>').join('') + '</div>' +
       '<h4>Items</h4><div class="tbl-wrap"><table class="items-tbl"><thead><tr><th>Item</th><th class="num">Price</th><th class="num">Qty</th><th class="num">Disc %</th><th class="num">Line</th><th></th></tr></thead><tbody>' +
       E.items.map((it, i) => '<tr data-row="' + i + '"><td><input class="search name" list="dl-prod" value="' + esc(it.name) + '" placeholder="Item"></td><td class="num"><input class="search price" type="number" min="0" step="1" value="' + it.price + '"></td><td class="num"><input class="search qty" type="number" min="1" step="1" value="' + it.qty + '"></td><td class="num"><input class="search disc" type="number" min="0" max="100" step="any" value="' + fmtPct(it.discount) + '" data-shown="' + fmtPct(it.discount) + '" data-orig="' + num(it.discount) + '"></td><td class="num" data-line="' + i + '">' + fmtINR(lineTotal(it)) + '</td><td><button class="btn danger sm" data-row-del="' + i + '" title="Remove line">✕</button></td></tr>').join('') +
       '</tbody></table></div><div class="row" style="margin-top:8px"><button class="btn subtle sm" id="e-add-row">＋ Add item</button></div>' +
