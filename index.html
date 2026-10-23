@@ -889,6 +889,8 @@
             grid-template-columns: 1fr 1fr !important;
         }
         .pdf-mode .detail-row { display: flex !important; flex-wrap: nowrap !important; }
+        /* Exported invoice shows only Name, Phone and Date */
+        .pdf-mode .detail-row.screen-only-detail { display: none !important; }
             .dash-link { text-decoration: none; display: inline-flex; align-items: center; margin-right: 8px; }
     </style>
 </head>
@@ -1004,12 +1006,12 @@
                 <span id="printCustPhone" class="show-on-print"></span>
                 <span id="phoneWarn" class="phone-warn hide-on-print" style="display:none;"></span>
             </div>
-            <div class="detail-row">
+            <div class="detail-row screen-only-detail">
                 <span class="detail-label">Birth Date:</span>
                 <input type="date" id="custBirthDate" class="hide-on-print">
                 <span id="printCustBirthDate" class="show-on-print"></span>
             </div>
-            <div class="detail-row">
+            <div class="detail-row screen-only-detail">
                 <span class="detail-label">Source:</span>
                 <select id="custSource" class="hide-on-print" onchange="calculate()">
                     <option value="Walk-In">Walk-In</option>
@@ -1033,12 +1035,12 @@
                 <input type="date" id="invoiceDate" class="hide-on-print">
                 <span id="printDate" class="show-on-print"></span>
             </div>
-            <div class="detail-row">
+            <div class="detail-row screen-only-detail">
                 <span class="detail-label">Instagram ID:</span>
                 <input type="text" id="custInsta" class="hide-on-print" placeholder="@username" autocomplete="off" autocapitalize="none" autocorrect="off">
                 <span id="printCustInsta" class="show-on-print"></span>
             </div>
-            <div class="detail-row">
+            <div class="detail-row screen-only-detail">
                 <span class="detail-label">Mode Of Payment:</span>
                 <select id="custPayment" class="hide-on-print" onchange="calculate()">
                     <option value="Cash">Cash</option>
@@ -1047,7 +1049,7 @@
                 </select>
                 <span id="printCustPayment" class="show-on-print"></span>
             </div>
-            <div class="detail-row">
+            <div class="detail-row screen-only-detail">
                 <span class="detail-label">City:</span>
                 <div class="city-search-wrap hide-on-print">
                     <input type="text" id="custCity" autocomplete="off" placeholder="Type to search city…"
