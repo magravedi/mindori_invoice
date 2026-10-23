@@ -854,6 +854,10 @@
             gap: 0 !important;
         }
         .pdf-mode tbody td::before { display: none !important; content: "" !important; }
+        /* The phone layout tags each row total with a "Total" label (.col-total::before);
+           in the PDF the column header must stay a plain header cell, not "TOTALTOTAL". */
+        .pdf-mode thead th::before { display: none !important; content: "" !important; }
+        .pdf-mode thead .col-total { display: table-cell !important; padding: 12px !important; margin: 0 !important; border-radius: 0 !important; font-size: 11px !important; font-weight: 700 !important; }
         .pdf-mode tbody .col-total {
             background: transparent !important;
             color: var(--text-dark) !important;
@@ -3073,7 +3077,7 @@
             // html2canvas captures the element by its own content box (not the
             // viewport), so element width vs. screen width no longer matters.
             const canvas = await html2canvas(clone, {
-                scale: 2,
+                scale: 1.5,
                 useCORS: true,
                 allowTaint: false,
                 letterRendering: true,
@@ -3110,15 +3114,14 @@
             const pageHeight = pdf.internal.pageSize.getHeight(); // 297mm
             const imgWidth = pageWidth;
             const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            // JPEG quality. Measured on a real 8-item, 2-page invoice at scale 2:
-            //   q0.98 -> 402 KB   q0.92 -> 280 KB   q0.85 -> 227 KB   q0.75 -> 187 KB
-            // Mean pixel error per channel (of 255) barely moves: 0.41 at q0.98
-            // vs 0.74 at q0.85 — invisible on black-on-white text, and the canvas
-            // resolution is untouched, so print sharpness is unchanged.
-            // (PNG was measured at 15 MB. Do not switch back.)
-            // To go smaller still, lower `scale` above rather than this: scale 1.5
-            // with the same quality measured 157 KB, at ~145 DPI instead of ~193.
-            const imgData = canvas.toDataURL('image/jpeg', 0.85);
+            // Size vs. sharpness. Measured with the real libraries (3-item / 12-item invoice):
+            //   scale 2,    q0.85 -> 198 / 308 KB   (previous setting)
+            //   scale 1.5,  q0.5  ->  83 / 128 KB   (this setting: ~1200px wide, ~145 DPI —
+            //                                         a phone screen's native width; text and
+            //                                         the PAID stamp stay clean even zoomed 2x)
+            //   scale 1.25, q0.6  ->  72 / 112 KB   (text visibly softer — not worth it)
+            // PNG was measured at 15 MB. Do not switch back.
+            const imgData = canvas.toDataURL('image/jpeg', 0.5);
 
             if (imgHeight <= pageHeight) {
                 // Fits on one page
