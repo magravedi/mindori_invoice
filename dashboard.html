@@ -148,6 +148,13 @@
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pill.pending { color: #fab219; } }
   :root[data-theme="dark"] .pill.pending { color: #fab219; }
   .pill.done { background: var(--good-bg); color: var(--good); }
+  .pay-toggle { font: inherit; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1px solid transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .pay-toggle.paid { background: rgba(22,163,74,0.14); color: #15803d; border-color: rgba(22,163,74,0.35); }
+  .pay-toggle.unpaid { background: rgba(220,38,38,0.12); color: #dc2626; border-color: rgba(220,38,38,0.35); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pay-toggle.paid { color: #4ade80; } :root:not([data-theme="light"]) .pay-toggle.unpaid { color: #f87171; } }
+  :root[data-theme="dark"] .pay-toggle.paid { color: #4ade80; } :root[data-theme="dark"] .pay-toggle.unpaid { color: #f87171; }
+  .pay-toggle:disabled { opacity: 0.6; cursor: wait; }
+  .adv-note { font-size: 11px; color: var(--muted); margin-top: 3px; }
   .link { color: var(--brand-ink); font-weight: 600; text-decoration: none; }
   .link:hover { text-decoration: underline; }
   .search { width: 100%; max-width: 360px; padding: 9px 12px; border: 1px solid var(--ring); border-radius: 9px; background: var(--surface-2); color: var(--ink); font: inherit; }
@@ -381,7 +388,7 @@
           <div class="missing-bar" id="inv-missing" hidden></div>
           <div class="row toolbar">
             <input class="search" id="inv-q" placeholder="Search number, name, phone, city, item, staff…">
-            <select id="inv-status"><option value="all">All statuses</option><option value="completed">✓ Paid</option><option value="pending">⏳ Advance pending</option></select>
+            <select id="inv-status"><option value="all">All statuses</option><option value="paid">✓ Paid</option><option value="unpaid">✗ Unpaid</option><option value="pending">⏳ Advance pending</option></select>
             <select id="inv-period"><option value="all">All time</option><option value="30d">Last 30 days</option><option value="mtd">This month</option><option value="lastm">Last month</option><option value="ytd">This year</option></select>
             <select id="inv-staff"><option value="">All staff</option></select>
             <select id="inv-source"><option value="">All sources</option></select>
@@ -524,6 +531,7 @@
     inv.advancePaid = num(inv.advancePaid);
     inv.balanceDue = num(inv.balanceDue);
     inv.status = str(inv.status) || 'completed';
+    inv.paid = (typeof raw.paid === 'boolean') ? raw.paid : inv.status !== 'pending';
     inv.items = (inv.items || []).map(it => ({ name: str(it.name), price: num(it.price), qty: num(it.qty) || 1, discount: num(it.discount) }));
     inv.number = num(inv.number) || (function () { const m = inv.invoiceID.match(/(\d+)\s*$/); return m ? parseInt(m[1], 10) : 0; })();
     return inv;
@@ -1122,14 +1130,16 @@
     else if (S.invPeriod === 'lastm') { a = isoOfDate(new Date(t0.getFullYear(), t0.getMonth() - 1, 1)); b = isoOfDate(new Date(t0.getFullYear(), t0.getMonth(), 1)); }
     else if (S.invPeriod === 'ytd') a = isoOfDate(new Date(t0.getFullYear(), 0, 1));
     let rows = src.filter(i => (!a || i.dateISO >= a) && (!b || i.dateISO < b));
-    if (S.invStatus === 'completed') rows = rows.filter(i => i.status !== 'pending'); else if (S.invStatus === 'pending') rows = rows.filter(i => i.status === 'pending');
+    if (S.invStatus === 'paid') rows = rows.filter(i => i.paid); else if (S.invStatus === 'unpaid') rows = rows.filter(i => !i.paid); else if (S.invStatus === 'pending') rows = rows.filter(i => i.status === 'pending');
     if (S.invStaff) rows = rows.filter(i => i.createdBy === S.invStaff);
     if (S.invSource) rows = rows.filter(i => i.source === S.invSource);
     if (q) rows = rows.filter(i => norm([i.invoiceID, i.customerName, i.phone, i.city, i.createdBy, i.source, i.paymentMode, i.items.map(it => it.name).join(' ')].join(' ')).indexOf(q) > -1);
     const so = S.invSort;
     return rows.sort((x, y) => so === 'oldest' ? x.number - y.number : so === 'high' ? y.grandTotal - x.grandTotal : so === 'low' ? x.grandTotal - y.grandTotal : y.number - x.number);
   }
-  const statusPill = (i, trashMode) => trashMode ? '<span class="pill trash">🗑 Deleted</span>' : i.status === 'pending' ? '<span class="pill pending">⏳ Advance</span>' : '<span class="pill done">✓ Paid</span>';
+  // Paid / Unpaid is a tap-to-switch button (green tick / red cross). Advance invoices also say so.
+  const payToggle = (i) => '<button type="button" class="pay-toggle ' + (i.paid ? 'paid' : 'unpaid') + '" data-inv-paid="' + esc(i.invoiceID) + '" aria-pressed="' + i.paid + '" title="Tap to mark as ' + (i.paid ? 'unpaid' : 'paid') + '">' + (i.paid ? '✓ Paid' : '✗ Unpaid') + '</button>';
+  const statusPill = (i, trashMode) => trashMode ? '<span class="pill trash">🗑 Deleted</span>' : payToggle(i) + (i.status === 'pending' ? ' <span class="pill pending">⏳ Advance</span>' : '');
   function renderInvoices() {
     const trashMode = S.invView === 'trash';
     $('inv-view-active').setAttribute('aria-pressed', String(!trashMode)); $('inv-view-trash').setAttribute('aria-pressed', String(trashMode));
@@ -1217,9 +1227,9 @@
   }
   function invoicesCsv() {
     const trashMode = S.invView === 'trash';
-    const H = ['Invoice ID','Created By','Date','Customer Name','Phone','Birth Date','Source','Instagram ID','Mode Of Payment','City','Item','Price','Qty','Disc %','Flat Discount','Grand Total','Advance Paid','Balance Due','Status'].concat(trashMode ? ['Deleted At'] : []);
+    const H = ['Invoice ID','Created By','Date','Customer Name','Phone','Birth Date','Source','Instagram ID','Mode Of Payment','City','Item','Price','Qty','Disc %','Flat Discount','Grand Total','Advance Paid','Balance Due','Status','Payment'].concat(trashMode ? ['Deleted At'] : []);
     const lines = [H.join(',')];
-    invoicesFiltered().forEach(i => { const items = i.items.length ? i.items : [{ name: '', price: '', qty: '', discount: '' }]; items.forEach((it, idx) => { const last = idx === items.length - 1; lines.push([i.invoiceID, i.createdBy, i.date, i.customerName, i.phone, i.birthDate, i.source, i.instagramID, i.paymentMode, i.city, it.name, it.price, it.qty, pctCsv(it.discount), last ? money2(i.flatDiscount) : 0, last ? money2(i.grandTotal) : 0, last ? money2(i.advancePaid) : 0, last ? money2(i.balanceDue) : 0, i.status === 'pending' ? 'Pending' : 'Completed'].concat(trashMode ? [i.deletedAt ? new Date(i.deletedAt).toISOString().slice(0, 10) : ''] : []).map(csvq).join(',')); }); });
+    invoicesFiltered().forEach(i => { const items = i.items.length ? i.items : [{ name: '', price: '', qty: '', discount: '' }]; items.forEach((it, idx) => { const last = idx === items.length - 1; lines.push([i.invoiceID, i.createdBy, i.date, i.customerName, i.phone, i.birthDate, i.source, i.instagramID, i.paymentMode, i.city, it.name, it.price, it.qty, pctCsv(it.discount), last ? money2(i.flatDiscount) : 0, last ? money2(i.grandTotal) : 0, last ? money2(i.advancePaid) : 0, last ? money2(i.balanceDue) : 0, i.status === 'pending' ? 'Pending' : 'Completed', i.paid ? 'Paid' : 'Unpaid'].concat(trashMode ? [i.deletedAt ? new Date(i.deletedAt).toISOString().slice(0, 10) : ''] : []).map(csvq).join(',')); }); });
     return lines.join('\n');
   }
 
@@ -1252,6 +1262,13 @@
     const b = ev.target.closest('button'); if (!b) return;
     if (b.dataset.p) { S.period = b.dataset.p; renderTab('overview', true); }
     else if (b.dataset.invOpen) openInvoice(b.dataset.invOpen);
+    else if (b.dataset.invPaid) {
+      const inv = findInvoice(b.dataset.invPaid); if (!inv) return;
+      const was = inv.paid; inv.paid = !was; b.disabled = true;
+      renderInvoices(); if (S.invOpen === inv.invoiceID && !S.invEdit) renderInvoiceDrawer();
+      window.Dash.api.setPaid(inv.invoiceID, inv.paid).then(() => { $('inv-status-msg').textContent = (inv.paid ? '✓ ' : '✗ ') + inv.invoiceID + ' marked ' + (inv.paid ? 'paid.' : 'unpaid.'); })
+        .catch(e => { inv.paid = was; renderInvoices(); if (S.invOpen === inv.invoiceID && !S.invEdit) renderInvoiceDrawer(); $('inv-status-msg').textContent = 'Could not update ' + inv.invoiceID + ' — ' + (e && e.message ? e.message : e); });
+    }
     else if (b.dataset.invDownload) { $('inv-status-msg').textContent = 'Preparing the PDF for ' + b.dataset.invDownload + ' — you will come straight back here.'; location.href = '/?reprint=' + encodeURIComponent(b.dataset.invDownload) + '&dl=1'; }
     else if (b.id === 'inv-drawer-close') closeInvoice();
     else if (b.id === 'inv-edit') startEdit();
@@ -1323,12 +1340,12 @@
 
   // ---------- CSV ----------
   function csv() {
-    const H = ['Invoice ID','Created By','Date','Customer Name','Phone','Birth Date','Source','Instagram ID','Mode Of Payment','City','Item','Price','Qty','Disc %','Flat Discount','Grand Total','Advance Paid','Balance Due','Status'];
+    const H = ['Invoice ID','Created By','Date','Customer Name','Phone','Birth Date','Source','Instagram ID','Mode Of Payment','City','Item','Price','Qty','Disc %','Flat Discount','Grand Total','Advance Paid','Balance Due','Status','Payment'];
     const q = (v) => { const s = String(v === null || v === undefined ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const lines = [H.join(',')];
     S.invoices.slice().sort((a, b) => a.number - b.number).forEach(i => {
       const items = i.items.length ? i.items : [{ name: '', price: '', qty: '', discount: '' }];
-      items.forEach((it, idx) => { const last = idx === items.length - 1; lines.push([i.invoiceID, i.createdBy, i.date, i.customerName, i.phone, i.birthDate, i.source, i.instagramID, i.paymentMode, i.city, it.name, it.price, it.qty, pctCsv(it.discount), last ? money2(i.flatDiscount) : 0, last ? money2(i.grandTotal) : 0, last ? money2(i.advancePaid) : 0, last ? money2(i.balanceDue) : 0, i.status === 'pending' ? 'Pending' : 'Completed'].map(q).join(',')); });
+      items.forEach((it, idx) => { const last = idx === items.length - 1; lines.push([i.invoiceID, i.createdBy, i.date, i.customerName, i.phone, i.birthDate, i.source, i.instagramID, i.paymentMode, i.city, it.name, it.price, it.qty, pctCsv(it.discount), last ? money2(i.flatDiscount) : 0, last ? money2(i.grandTotal) : 0, last ? money2(i.advancePaid) : 0, last ? money2(i.balanceDue) : 0, i.status === 'pending' ? 'Pending' : 'Completed', i.paid ? 'Paid' : 'Unpaid'].map(q).join(',')); });
     });
     return lines.join('\n');
   }
@@ -1438,6 +1455,7 @@
       await setDoc(doc(col('invoices'), id), Object.assign({}, docu, { deleted: false, updatedAt: Date.now(), updatedBy: me }), { merge: true });
       await loadAll(); Dash.render();
     },
+    async setPaid(id, paid) { await setDoc(doc(col('invoices'), id), { paid: !!paid, updatedAt: Date.now(), updatedBy: me }, { merge: true }); },
     async trashInvoice(id) { await setDoc(doc(col('invoices'), id), { deleted: true, deletedAt: Date.now(), deletedBy: me }, { merge: true }); await loadAll(); Dash.render(); },
     async restoreInvoice(id) { await setDoc(doc(col('invoices'), id), { deleted: false, deletedAt: null, deletedBy: null, restoredAt: Date.now(), restoredBy: me }, { merge: true }); await loadAll(); Dash.render(); },
     async deleteInvoiceForever(id) { await deleteDoc(doc(col('invoices'), id)); await loadAll(); Dash.render(); },

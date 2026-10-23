@@ -854,6 +854,10 @@
             gap: 0 !important;
         }
         .pdf-mode tbody td::before { display: none !important; content: "" !important; }
+        /* The phone layout tags each row total with a "Total" label (.col-total::before);
+           in the PDF the column header must stay a plain header cell, not "TOTALTOTAL". */
+        .pdf-mode thead th::before { display: none !important; content: "" !important; }
+        .pdf-mode thead .col-total { display: table-cell !important; padding: 12px !important; margin: 0 !important; border-radius: 0 !important; font-size: 11px !important; font-weight: 700 !important; }
         .pdf-mode tbody .col-total {
             background: transparent !important;
             color: var(--text-dark) !important;
@@ -891,6 +895,18 @@
         .pdf-mode .detail-row { display: flex !important; flex-wrap: nowrap !important; }
         /* Exported invoice shows only Name, Phone and Date */
         .pdf-mode .detail-row.screen-only-detail { display: none !important; }
+        /* Paid / Unpaid toggle: green tick when paid, red cross when unpaid */
+        #paidToggle + .toggle-slider { background: #ef4444; }
+        #paidToggle:checked + .toggle-slider { background: #16a34a; }
+        .paid-label { font-weight: 700; color: #dc2626; }
+        #paidToggle:checked ~ .paid-label { color: #16a34a; }
+        #paidToggle:checked ~ .paid-label .when-unpaid, #paidToggle:not(:checked) ~ .paid-label .when-paid { display: none; }
+        /* PAID stamp: only on the exported PDF of a paid invoice, beside the totals */
+        .summary-wrapper { position: relative; }
+        .paid-stamp { display: none; position: absolute; right: 340px; top: 50%; width: 140px; height: 140px; margin-top: -70px; pointer-events: none; }
+        .pdf-mode.is-paid .paid-stamp { display: block !important; }
+        .pdf-mode .summary-wrapper { justify-content: flex-end !important; }
+        .pdf-mode .totals-box { width: 320px !important; }
             .dash-link { text-decoration: none; display: inline-flex; align-items: center; margin-right: 8px; }
     </style>
 </head>
@@ -1089,13 +1105,19 @@
                 <span class="toggle-label">Flat Discount</span>
             </label>
             <label class="toggle-switch">
-                <input type="checkbox" id="advanceToggle" onchange="toggleAdvance()">
+                <input type="checkbox" id="advanceToggle" onchange="toggleAdvance(); setPaid(!advanceEnabled)">
                 <span class="toggle-slider"></span>
                 <span class="toggle-label">Advance Paid</span>
+            </label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="paidToggle" checked>
+                <span class="toggle-slider"></span>
+                <span class="toggle-label paid-label"><span class="when-paid">✓ Paid</span><span class="when-unpaid">✗ Unpaid</span></span>
             </label>
         </div>
     </div>
     <div class="summary-wrapper">
+        <img class="paid-stamp" src="/paid-stamp.png" alt="Paid">
         <div class="totals-box">
             <div class="totals-row"><span>Subtotal</span><span id="subtotal">₹0.00</span></div>
             <div class="totals-row" id="discountSummaryRow"><span>Total Discount</span><span id="totalDiscount" style="color: #ef4444;">-₹0.00</span></div>
@@ -1468,6 +1490,12 @@
         flatDiscountAmount = parseFloat(val) || 0;
         calculate();
     }
+
+    // Paid / Unpaid. Turning "Advance Paid" on means money is still due, so the
+    // invoice flips to Unpaid (and back to Paid when advance is turned off);
+    // staff can still change it by hand.
+    function setPaid(paid) { document.getElementById('paidToggle').checked = !!paid; }
+    function savedPaid(inv) { return (typeof inv.paid === 'boolean') ? inv.paid : (inv.status !== 'pending'); }
 
     function toggleAdvance() {
         advanceEnabled = document.getElementById('advanceToggle').checked;
@@ -2278,6 +2306,7 @@
             instagramID: document.getElementById('custInsta').value,
             paymentMode: document.getElementById('custPayment').value,
             city: document.getElementById('custCity').value,
+            paid: document.getElementById('paidToggle').checked,
             grandTotal: roundMoney(currentGrandTotal),
             flatDiscount: flatDiscountEnabled ? flatDiscountAmount : 0,
             advancePaid: advanceEnabled ? advanceAmount : 0,
@@ -2586,6 +2615,7 @@
             document.getElementById('advanceInput').value = adv;
             updateAdvance(adv);
         }
+        setPaid(savedPaid(inv));
 
         render();
         calculate();
@@ -2685,6 +2715,7 @@
         // Turn on the advance toggle so the user enters the advance amount
         document.getElementById('advanceToggle').checked = true;
         toggleAdvance();
+        setPaid(false);
         const banner = document.getElementById('advance-banner');
         banner.style.display = 'flex';
         document.getElementById('advance-banner-text').innerHTML =
@@ -2705,6 +2736,7 @@
         document.getElementById('reprint-banner').style.display = 'none';
 
         appMode = 'advanceFinalize';
+        setPaid(true);
         finalizingAdvanceId = inv.invoiceID || '';
         applyModeUI();
         const banner = document.getElementById('advance-banner');
@@ -2929,6 +2961,7 @@
         // Clone the invoice and force desktop PDF layout on the clone only
         const clone = element.cloneNode(true);
         clone.classList.add('pdf-mode');
+        clone.classList.toggle('is-paid', document.getElementById('paidToggle').checked);
         clone.style.width = '800px';
         clone.style.maxWidth = '800px';
         clone.style.minHeight = '0';
@@ -3044,7 +3077,7 @@
             // html2canvas captures the element by its own content box (not the
             // viewport), so element width vs. screen width no longer matters.
             const canvas = await html2canvas(clone, {
-                scale: 2,
+                scale: 1.5,
                 useCORS: true,
                 allowTaint: false,
                 letterRendering: true,
@@ -3081,15 +3114,14 @@
             const pageHeight = pdf.internal.pageSize.getHeight(); // 297mm
             const imgWidth = pageWidth;
             const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            // JPEG quality. Measured on a real 8-item, 2-page invoice at scale 2:
-            //   q0.98 -> 402 KB   q0.92 -> 280 KB   q0.85 -> 227 KB   q0.75 -> 187 KB
-            // Mean pixel error per channel (of 255) barely moves: 0.41 at q0.98
-            // vs 0.74 at q0.85 — invisible on black-on-white text, and the canvas
-            // resolution is untouched, so print sharpness is unchanged.
-            // (PNG was measured at 15 MB. Do not switch back.)
-            // To go smaller still, lower `scale` above rather than this: scale 1.5
-            // with the same quality measured 157 KB, at ~145 DPI instead of ~193.
-            const imgData = canvas.toDataURL('image/jpeg', 0.85);
+            // Size vs. sharpness. Measured with the real libraries (3-item / 12-item invoice):
+            //   scale 2,    q0.85 -> 198 / 308 KB   (previous setting)
+            //   scale 1.5,  q0.5  ->  83 / 128 KB   (this setting: ~1200px wide, ~145 DPI —
+            //                                         a phone screen's native width; text and
+            //                                         the PAID stamp stay clean even zoomed 2x)
+            //   scale 1.25, q0.6  ->  72 / 112 KB   (text visibly softer — not worth it)
+            // PNG was measured at 15 MB. Do not switch back.
+            const imgData = canvas.toDataURL('image/jpeg', 0.5);
 
             if (imgHeight <= pageHeight) {
                 // Fits on one page
@@ -3235,6 +3267,7 @@
       items: (p.items || []).filter(it => str_(it.name)).map(it => ({ name: str_(it.name), price: num_(it.price), qty: num_(it.qty) || 1, discount: num_(it.discount) })),
       flatDiscount: num_(p.flatDiscount), grandTotal: num_(p.grandTotal),
       advancePaid: num_(p.advancePaid), balanceDue: num_(p.balanceDue),
+      paid: (typeof p.paid === 'boolean') ? p.paid : (status !== 'pending'),
       status: status
     };
   }
